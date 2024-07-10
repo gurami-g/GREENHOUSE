@@ -28,11 +28,11 @@ int soilmoisturepercent=0;
 #define RELAY2_ADDR 1   // Address to store relay 2 state
 void saveRelayState(int addr, bool state); // Function declaration
 // Set your Static IP address
-IPAddress local_IP(192, 168, 0, 101);
+IPAddress local_IP(192, 168, 1, 101);
 // Set your Gateway IP address
-IPAddress gateway(192, 168, 0, 1);
+IPAddress gateway(192, 168, 1, 1);
 
-IPAddress subnet(255, 255, 0, 0);
+IPAddress subnet(255, 255, 255, 0);
 IPAddress primaryDNS(8, 8, 8, 8);   //optional
 IPAddress secondaryDNS(8, 8, 4, 4); //optional
 AsyncWebServer server(80);
@@ -43,197 +43,216 @@ const char* htmlPage = R"=====(
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Greenhouse dashboard for monitoring and controlling temperature, soil moisture, and air humidity.">
     <title>Greenhouse</title>
     <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
     <style>
-body {
-    font-family: Arial, sans-serif;
-    margin: 0;
-    padding: 0;
-    background-color: #f9fbe7; /* Light yellow background */
-    color: #37474f; /* Dark grayish-blue text */
-    position: relative;
-}
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f9fbe7;
+            color: #37474f;
+            position: relative;
+        }
+        .container {
+            text-align: center;
+            padding: 20px;
+        }
+        h1 {
+            font-size: 2rem;
+            margin-bottom: 20px;
+            color: #00b436;
+        }
+        .sensor-container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .sensor-item {
+            width: calc(33.33% - 20px);
+            padding: 20px;
+            background-color: #c7c7c7;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            transition: background-color 0.3s;
+        }
+        .sensor-item:hover {
+            background-color: #d7d7d7;
+        }
+        .sensor-item {
+            width: calc(50% - 20px); /* Adjust width to fit both items */
+            padding: 20px;
+            background-color: #c7c7c7;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            transition: background-color 0.3s;
+            position: relative; /* Ensure relative positioning for child elements */
+        }
 
-.container {
-    text-align: center;
-    padding: 20px;
-}
+        .sensor-value-container {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 20px;
+        }
 
-h1 {
-    font-size: 2rem;
-    margin-bottom: 20px;
-    color: #00b436; /* Green */
-}
-
-.sensor-container {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 20px;
-    margin-top: 20px;
-}
-
-.sensor-item {
-    width: calc(25% - 20px);
-    padding: 20px;
-    background-color: #c7c7c7; /* Light gray */
-    border-radius: 10px;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-    text-align: center;
-}
-
-.sensor-item p {
-    margin-top: 10px;
-    font-size: 1rem;
-    color: #00b436; /* Green */
-}
-
-.sensor-value-container {
-    position: relative;
-    width: 100px;
-    height: 100px;
-    border-radius: 50%;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    overflow: hidden;
-    background-color: #f5f5f5; 
-}
-
-.sensor-value {
-    position: absolute;
-    top: 50%;
-    left: 0;
-    width: 100%;
-    text-align: center;
-    transform: translateY(-50%);
-    font-size: 1.5rem;
-}
-
-.switch-container {
-    display: inline-block;
-    vertical-align: middle;
-    margin-top: 20px;
-}
-
-.switch-container input[type="checkbox"] {
-    display: none;
-}
-
-.switch-slider {
-    position: relative;
-    display: inline-block;
-    width: 50px;
-    height: 24px;
-    border-radius: 34px;
-    transition: background-color 0.4s;
-    cursor: pointer;
-}
-
-.switch-slider:before {
-    content: "";
-    position: absolute;
-    height: 20px;
-    width: 20px;
-    left: 2px;
-    bottom: 2px;
-    background-color: #ffffff; /* White */
-    border-radius: 50%;
-    transition: transform 0.4s;
-}
-
-.switch-container input[type="checkbox"]:checked + .switch-slider {
-    background-color: var(--switch-on-color);
-}
-
-.switch-container input[type="checkbox"] + .switch-slider {
-    background-color: var(--switch-off-color);
-}
-
-.switch-container input[type="checkbox"]:checked + .switch-slider:before {
-    transform: translateX(26px);
-}
-
-.relay-button {
-    padding: 10px 20px;
-    font-size: 1rem;
-    border: none;
-    border-radius: 5px;
-    cursor: pointer;
-    margin: 0 10px;
-    transition: background-color 0.3s, color 0.3s, transform 0.2s;
-    background-color: #4caf50; /* Green */
-    color: white;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.relay-button:hover {
-    background-color: #388e3c; /* Darker green */
-    transform: translateY(-2px);
-}
-
-.relay-button:focus {
-    outline: none;
-}
-
-/* Dark Mode Styles */
-body.dark-mode {
-    background-color: #303030; /* Dark gray */
-    color: #e0e0e0; /* Light gray */
-}
-
-.dark-mode .container {
-    background-color: #424242; /* Dark gray */
-}
-
-.dark-mode h1 {
-    color: #81d4fa; /* Light blue */
-}
-
-.dark-mode .sensor-item {
-    background-color: #616161; /* Medium gray */
-    color: #e0e0e0; /* Light gray */
-}
-
-.dark-mode .sensor-value-container {
-    background-color: #757575; /* Darker gray */
-}
-
-.dark-mode .sensor-value {
-    color: #81d4fa; /* Light blue */
-}
-
-.dark-mode .sensor-item p {
-    color: #81d4fa; /* Light blue */
-}
-
-.dark-mode .switch-slider {
-    background-color: #595656; /* Light gray */
-}
-
-.dark-mode .switch-slider:before {
-    background-color: #757575; /* Darker gray */
-}
-
-.dark-mode .relay-button {
-    background-color: #81d4fa; /* Light blue */
-}
-
-.dark-mode .relay-button:hover {
-    background-color: #4caf50; /* Green */
-}
-
-/* Position Dark Mode Switch in the Top Right Corner */
-#darkModeSwitchContainer {
-    position: absolute;
-    top: 10px;
-    right: 10px;
-}
+        .sensor-value {
+            width: 100px; /* Adjust width as needed */
+            text-align: center;
+            font-size: 1.5rem;
+            position: relative; /* Ensure relative positioning for absolute positioning of temperature and humidity */
+        }
+        .sensor-value:nth-child(2) {
+            color: #1e88e5; /* Adjust color for humidity */
+        }
+        .sensor-value:before {
+            content: '';
+            position: absolute;
+            left: 50%; /* Adjust position as needed */
+            transform: translateX(-50%);
+            bottom: -10px; /* Adjust spacing between readings */
+            height: 10px;
+            width: 1px;
+             /* Adjust color for separator */
+        }
+        .switch-container {
+            display: inline-block;
+            vertical-align: middle;
+            margin-top: 20px;
+        }
+        .switch-container input[type="checkbox"] {
+            display: none;
+        }
+        .switch-slider {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 24px;
+            border-radius: 34px;
+            transition: background-color 0.4s;
+            cursor: pointer;
+            background-color: var(--switch-off-color);
+        }
+        .switch-slider:before {
+            content: "";
+            position: absolute;
+            height: 20px;
+            width: 20px;
+            left: 2px;
+            bottom: 2px;
+            background-color: #ffffff;
+            border-radius: 50%;
+            transition: transform 0.4s;
+        }
+        .switch-container input[type="checkbox"]:checked + .switch-slider {
+            background-color: var(--switch-on-color);
+        }
+        .switch-container input[type="checkbox"]:checked + .switch-slider:before {
+            transform: translateX(26px);
+        }
+        .relay-button {
+            padding: 10px 20px;
+            font-size: 1rem;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 0 10px;
+            transition: background-color 0.3s, color 0.3s, transform 0.2s;
+            background-color: #4caf50;
+            color: white;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        .relay-button:hover {
+            background-color: #388e3c;
+            transform: translateY(-2px);
+        }
+        .relay-button:focus {
+            outline: none;
+        }
+        .input-graph {
+            margin-top: 10px;
+            position: relative;
+        }
+        .range-dot {
+            position: absolute;
+            height: 10px;
+            width: 10px;
+            background-color: #000;
+            border-radius: 50%;
+            transform: translateX(-50%);
+        }
+        .lower-dot {
+            top: 0;
+        }
+        .upper-dot {
+            top: 0;
+            right: 0;
+        }
+        .sensor-item {
+            position: relative;
+        }
+        #temperatureSensor .range-dot.lower-dot,
+        #moistureSensor .range-dot.lower-dot,
+        #humiditySensor .range-dot.lower-dot {
+            --position: calc((var(--position) / (var(--max) - var(--min))) * 100%);
+            left: var(--position);
+        }
+        #temperatureSensor .range-dot.lower-dot {
+            background-color: #3f51b5;
+        }
+        #moistureSensor .range-dot.lower-dot {
+            background-color: #8bc34a;
+        }
+        #humiditySensor .range-dot.lower-dot {
+            background-color: #ff9800;
+        }
+        body.dark-mode {
+            background-color: #303030;
+            color: #e0e0e0;
+        }
+        .dark-mode .container {
+            background-color: #424242;
+        }
+        .dark-mode h1 {
+            color: #81d4fa;
+        }
+        .dark-mode .sensor-item {
+            background-color: #616161;
+            color: #e0e0e0;
+        }
+        .dark-mode .sensor-value-container {
+            background-color: #757575;
+        }
+        .dark-mode .sensor-value {
+            color: #81d4fa;
+        }
+        .dark-mode .sensor-item p {
+            color: #81d4fa;
+        }
+        .dark-mode .switch-slider {
+            background-color: #595656;
+        }
+        .dark-mode .switch-slider:before {
+            background-color: #757575;
+        }
+        .dark-mode .relay-button {
+            background-color: #81d4fa;
+        }
+        .dark-mode .relay-button:hover {
+            background-color: #4caf50;
+        }
+        #darkModeSwitchContainer {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+        }
     </style>
 </head>
 <body>
-    <!-- Dark Mode Switch -->
     <div id="darkModeSwitchContainer" class="switch-container">
         <label class="switch-container" style="--switch-on-color: #030303; --switch-off-color: #bdbdbd;">
             <input type="checkbox" id="darkModeToggle" onclick="toggleDarkMode()">
@@ -242,15 +261,21 @@ body.dark-mode {
     </div>
     <div class="container">
         <h1>სათბური</h1>
-        <!-- Sensor Containers -->
         <div class="sensor-container">
-            <div class="sensor-item" id="temperatureSensor">
-                <p>ტემპერატურა</p>
+            <div class="sensor-item" id="temperatureHumiditySensor">
+                <p>ტემპერატურა და ჰაერის ტენიანობა</p>
                 <div class="sensor-value-container">
-                    <div class="sensor-value" style="color: #e90808;"> <!-- Red for temperature -->
+                    <div class="sensor-value" style="color: #e90808;">
                         <span id="temp">--</span>
                     </div>
+                    <div class="sensor-value" style="color: #1e88e5;">
+                        <span id="humid">--</span>
+                    </div>
                 </div>
+                <input type="range" id="tempLowerLimit" class="input-graph" min="0" max="50" value="0" oninput="updateLimitDisplay('temp')">
+                <p>ქვედა ზღვარი: <span id="tempLowerLimitDisplay">0°C</span></p>
+                <input type="range" id="tempLimit" class="input-graph" min="0" max="50" value="0" oninput="updateLimitDisplay('temp')">
+                <p>ზედა ზღვარი: <span id="tempLimitDisplay">0°C</span></p>
                 <label class="switch-container" style="--switch-on-color: #e90808; --switch-off-color: #bdbdbd;">
                     <input type="checkbox" id="heatingToggle" onclick="toggleHeating()">
                     <span class="switch-slider"></span>
@@ -259,70 +284,136 @@ body.dark-mode {
             <div class="sensor-item" id="moistureSensor">
                 <p>ნიადაგის ტენიანობა</p>
                 <div class="sensor-value-container">
-                    <div class="sensor-value" style="color: #713c2a;"> <!-- Brown for moisture -->
+                    <div class="sensor-value" style="color: #713c2a;">
                         <span id="moisture">--</span>
                     </div>
                 </div>
+                <input type="range" id="moistureLowerLimit" class="input-graph" min="0" max="100" value="0" oninput="updateLimitDisplay('moisture')">
+                <p>ქვედა ზღვარი: <span id="moistureLowerLimitDisplay">0%</span></p>
+                <input type="range" id="moistureLimit" class="input-graph" min="0" max="100" value="0" oninput="updateLimitDisplay('moisture')">
+                <p>ზედა ზღვარი: <span id="moistureLimitDisplay">0%</span></p>
                 <label class="switch-container" style="--switch-on-color: #713c2a; --switch-off-color: #bdbdbd;">
                     <input type="checkbox" id="wateringToggle" onclick="toggleWatering()">
                     <span class="switch-slider"></span>
                 </label>
             </div>
-            <div class="sensor-item" id="humiditySensor">
-                <p>ჰაერის ტენიანობა</p>
-                <div class="sensor-value-container">
-                    <div class="sensor-value" style="color: #1e88e5;"> <!-- Blue for humidity -->
-                        <span id="humid">--</span>
-                    </div>
-                </div>
-            </div>
         </div>
-    </div>
-
+        
     <script>
-        // Function to update sensor readings
         function updateReadings() {
             var xhr = new XMLHttpRequest();
             xhr.onreadystatechange = function() {
                 if (xhr.readyState == XMLHttpRequest.DONE && xhr.status == 200) {
                     var response = JSON.parse(xhr.responseText);
                     var tempSymbol = '\u00B0C';
-                    // Update temperature reading
                     document.getElementById("temp").innerText = response.temperature + tempSymbol;
-                    // Update moisture reading
                     document.getElementById("moisture").innerText = response.moisture + "%";
-                    // Update humidity reading
                     document.getElementById("humid").innerText = response.humidity + " %";
+
+                    var tempLimit = parseFloat(document.getElementById("tempLimit").value);
+                    var tempLowerLimit = parseFloat(document.getElementById("tempLowerLimit").value);
+                    var moistureLimit = parseFloat(document.getElementById("moistureLimit").value);
+                    var moistureLowerLimit = parseFloat(document.getElementById("moistureLowerLimit").value);
+
+                    var heatingToggle = document.getElementById("heatingToggle");
+                    var wateringToggle = document.getElementById("wateringToggle");
+
+                    if (response.temperature > tempLimit && heatingToggle.checked) {
+                        heatingToggle.checked = false;
+                        toggleHeating(false);
+                    } else if (response.temperature < tempLowerLimit && !heatingToggle.checked) {
+                        heatingToggle.checked = true;
+                        toggleHeating(false);
+                    } else if (response.temperature >= tempLowerLimit && response.temperature <= tempLimit && !heatingToggle.checked) {
+                        heatingToggle.checked = true;
+                        toggleHeating(false);
+                    }
+
+                    if (response.moisture > moistureLimit && wateringToggle.checked) {
+                        wateringToggle.checked = false;
+                        toggleWatering(false);
+                    } else if (response.moisture < moistureLowerLimit && !wateringToggle.checked) {
+                        wateringToggle.checked = true;
+                        toggleWatering(false);
+                    } else if (response.moisture >= moistureLowerLimit && response.moisture <= moistureLimit && !wateringToggle.checked) {
+                        wateringToggle.checked = true;
+                        toggleWatering(false);
+                    }
                 }
             };
             xhr.open("GET", "/readings", true);
             xhr.send();
         }
 
-        // Function to toggle dark mode
+        // Save the range values to localStorage
+        function saveRangeValues(sensor) {
+            var lowerLimit = document.getElementById(sensor + 'LowerLimit').value;
+            var upperLimit = document.getElementById(sensor + 'Limit').value;
+            localStorage.setItem(sensor + 'LowerLimit', lowerLimit);
+            localStorage.setItem(sensor + 'UpperLimit', upperLimit);
+        }
+
+        // Load the range values from localStorage
+        function loadRangeValues(sensor) {
+            var lowerLimit = localStorage.getItem(sensor + 'LowerLimit');
+            var upperLimit = localStorage.getItem(sensor + 'UpperLimit');
+            if (lowerLimit !== null) {
+                document.getElementById(sensor + 'LowerLimit').value = lowerLimit;
+                document.getElementById(sensor + 'LowerLimitDisplay').innerText = sensor === 'temp' ? lowerLimit + '°C' : lowerLimit + '%';
+            }
+            if (upperLimit !== null) {
+                document.getElementById(sensor + 'Limit').value = upperLimit;
+                document.getElementById(sensor + 'LimitDisplay').innerText = sensor === 'temp' ? upperLimit + '°C' : upperLimit + '%';
+            }
+        }
+
+        // Update the limit display and save the values
+        function updateLimitDisplay(sensor) {
+            var lowerLimit = document.getElementById(sensor + 'LowerLimit').value;
+            var upperLimit = document.getElementById(sensor + 'Limit').value;
+            var lowerDisplay = document.getElementById(sensor + 'LowerLimitDisplay');
+            var upperDisplay = document.getElementById(sensor + 'LimitDisplay');
+
+            if (sensor === 'temp') {
+                lowerDisplay.innerText = lowerLimit + '°C';
+                upperDisplay.innerText = upperLimit + '°C';
+            } else {
+                lowerDisplay.innerText = lowerLimit + '%';
+                upperDisplay.innerText = upperLimit + '%';
+            }
+            saveRangeValues(sensor);
+        }
+
+        // Apply saved range values on page load
+        function applyRangeValues() {
+            loadRangeValues('temp');
+            loadRangeValues('moisture');
+        }
+
         function toggleDarkMode() {
             document.body.classList.toggle('dark-mode');
         }
 
-        // Function to toggle heating relay
-        function toggleHeating() {
+        function toggleHeating(manual = true) {
             var xhr = new XMLHttpRequest();
             xhr.open("GET", "/toggleHeating", true);
             xhr.send();
-            var heatingToggle = document.getElementById("heatingToggle");
-            localStorage.setItem("heatingEnabled", heatingToggle.checked);
+            if (manual) {
+                var heatingToggle = document.getElementById("heatingToggle");
+                localStorage.setItem("heatingEnabled", heatingToggle.checked);
+            }
         }
 
-        // Function to toggle watering relay
-        function toggleWatering() {
+        function toggleWatering(manual = true) {
             var xhr = new XMLHttpRequest();
             xhr.open("GET", "/toggleWatering", true);
             xhr.send();
-            var wateringToggle = document.getElementById("wateringToggle");
-            localStorage.setItem("wateringEnabled", wateringToggle.checked);
+            if (manual) {
+                var wateringToggle = document.getElementById("wateringToggle");
+                localStorage.setItem("wateringEnabled", wateringToggle.checked);
+            }
         }
 
-        // Function to retrieve and apply the stored toggle state on page load
         function applyToggleState() {
             var heatingToggle = document.getElementById("heatingToggle");
             var wateringToggle = document.getElementById("wateringToggle");
@@ -337,6 +428,7 @@ body.dark-mode {
         }
 
         applyToggleState();
+        applyRangeValues();
         setInterval(updateReadings, 2000);
     </script>
 </body>

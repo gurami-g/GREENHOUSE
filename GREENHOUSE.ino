@@ -57,7 +57,7 @@ const char* htmlPage = R"=====(
         }
         .container {
             text-align: center;
-            padding: 20px;
+            padding: 10px;
         }
         h1 {
             font-size: 2rem;
@@ -66,10 +66,9 @@ const char* htmlPage = R"=====(
         }
         .sensor-container {
             display: flex;
-            flex-wrap: wrap;
-            justify-content: center;
-            gap: 20px;
-            margin-top: 20px;
+            justify-content: top;
+            gap: 10px;
+            margin-top: 10px;
         }
         .sensor-item {
             width: calc(33.33% - 20px);
@@ -224,9 +223,6 @@ const char* htmlPage = R"=====(
             background-color: #616161;
             color: #e0e0e0;
         }
-        .dark-mode .sensor-value-container {
-            background-color: #757575;
-        }
         .dark-mode .sensor-value {
             color: #81d4fa;
         }
@@ -273,9 +269,9 @@ const char* htmlPage = R"=====(
                     </div>
                 </div>
                 <input type="range" id="tempLowerLimit" class="input-graph" min="0" max="50" value="0" oninput="updateLimitDisplay('temp')">
-                <p>ქვედა ზღვარი: <span id="tempLowerLimitDisplay">0°C</span></p>
+                <p>Lower Limit: <span id="tempLowerLimitDisplay">0°C</span></p>
                 <input type="range" id="tempLimit" class="input-graph" min="0" max="50" value="0" oninput="updateLimitDisplay('temp')">
-                <p>ზედა ზღვარი: <span id="tempLimitDisplay">0°C</span></p>
+                <p>Upper Limit: <span id="tempLimitDisplay">0°C</span></p>
                 <label class="switch-container" style="--switch-on-color: #e90808; --switch-off-color: #bdbdbd;">
                     <input type="checkbox" id="heatingToggle" onclick="toggleHeating()">
                     <span class="switch-slider"></span>
@@ -289,9 +285,9 @@ const char* htmlPage = R"=====(
                     </div>
                 </div>
                 <input type="range" id="moistureLowerLimit" class="input-graph" min="0" max="100" value="0" oninput="updateLimitDisplay('moisture')">
-                <p>ქვედა ზღვარი: <span id="moistureLowerLimitDisplay">0%</span></p>
+                <p>Lower Limit: <span id="moistureLowerLimitDisplay">0%</span></p>
                 <input type="range" id="moistureLimit" class="input-graph" min="0" max="100" value="0" oninput="updateLimitDisplay('moisture')">
-                <p>ზედა ზღვარი: <span id="moistureLimitDisplay">0%</span></p>
+                <p>Upper Limit: <span id="moistureLimitDisplay">0%</span></p>
                 <label class="switch-container" style="--switch-on-color: #713c2a; --switch-off-color: #bdbdbd;">
                     <input type="checkbox" id="wateringToggle" onclick="toggleWatering()">
                     <span class="switch-slider"></span>
@@ -345,29 +341,6 @@ const char* htmlPage = R"=====(
             xhr.send();
         }
 
-        // Save the range values to localStorage
-        function saveRangeValues(sensor) {
-            var lowerLimit = document.getElementById(sensor + 'LowerLimit').value;
-            var upperLimit = document.getElementById(sensor + 'Limit').value;
-            localStorage.setItem(sensor + 'LowerLimit', lowerLimit);
-            localStorage.setItem(sensor + 'UpperLimit', upperLimit);
-        }
-
-        // Load the range values from localStorage
-        function loadRangeValues(sensor) {
-            var lowerLimit = localStorage.getItem(sensor + 'LowerLimit');
-            var upperLimit = localStorage.getItem(sensor + 'UpperLimit');
-            if (lowerLimit !== null) {
-                document.getElementById(sensor + 'LowerLimit').value = lowerLimit;
-                document.getElementById(sensor + 'LowerLimitDisplay').innerText = sensor === 'temp' ? lowerLimit + '°C' : lowerLimit + '%';
-            }
-            if (upperLimit !== null) {
-                document.getElementById(sensor + 'Limit').value = upperLimit;
-                document.getElementById(sensor + 'LimitDisplay').innerText = sensor === 'temp' ? upperLimit + '°C' : upperLimit + '%';
-            }
-        }
-
-        // Update the limit display and save the values
         function updateLimitDisplay(sensor) {
             var lowerLimit = document.getElementById(sensor + 'LowerLimit').value;
             var upperLimit = document.getElementById(sensor + 'Limit').value;
@@ -381,13 +354,6 @@ const char* htmlPage = R"=====(
                 lowerDisplay.innerText = lowerLimit + '%';
                 upperDisplay.innerText = upperLimit + '%';
             }
-            saveRangeValues(sensor);
-        }
-
-        // Apply saved range values on page load
-        function applyRangeValues() {
-            loadRangeValues('temp');
-            loadRangeValues('moisture');
         }
 
         function toggleDarkMode() {
@@ -428,7 +394,6 @@ const char* htmlPage = R"=====(
         }
 
         applyToggleState();
-        applyRangeValues();
         setInterval(updateReadings, 2000);
     </script>
 </body>
@@ -539,7 +504,7 @@ void loop() {
         // Read soil moisture
         soilMoistureValue = analogRead(soilMoisturePin);  //put Sensor insert into soil
         soilmoisturepercent = map(soilMoistureValue, AirValue, WaterValue, 0, 100);
-        Serial.println("Soil Moisture: " + String(soilmoisturepercent) + "%");
+        Serial.println("Soil Moisture: " + String(soilmoisturepercent));
     }
 }
 // Function to save relay state to EEPROM

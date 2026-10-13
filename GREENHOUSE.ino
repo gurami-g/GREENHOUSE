@@ -2,7 +2,8 @@
 #include <ESPAsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 #include <DHT.h>
-#include <EEPROM.h> 
+#include <EEPROM.h>
+
 const char* ssid = "MAGTI-1";
 const char* password = "gorgadze12";
 
@@ -10,31 +11,34 @@ const char* password = "gorgadze12";
 #define DHTTYPE DHT22
 DHT dht(DHTPIN, DHTTYPE);
 
-const int relayPin1 = D2; // First relay pin
-const int relayPin2 = D3; // Second relay pin
-const int soilMoisturePin = A0; // Soil moisture sensor pin
-bool relayState1 = true; // Initial state for the first relay
-bool relayState2 = true; // Initial state for the second relay
-int t = 0;
-int h = 0;
-const int AirValue = 667;   //you need to replace this value with Value_1
-const int WaterValue = 280;  //you need to replace this value with Value_2
+const int relayPin1 = D2;        // პირველი რელე (გათბობა)
+const int relayPin2 = D3;        // მეორე რელე (მორწყვა)
+const int soilMoisturePin = A0;  // ნიადაგის ტენიანობის სენსორი
+
+bool relayState1 = true; 
+bool relayState2 = true; 
+
+float t = 0.0;
+float h = 0.0;
+
+const int AirValue = 667;   // მშრალი ჰაერის/მიწის კალიბრაციის მნიშვნელობა
+const int WaterValue = 280; // წყლის კალიბრაციის მნიშვნელობა
 int soilMoistureValue = 0;
-int soilmoisturepercent=0;
+int soilmoisturepercent = 0;
 
-// Define EEPROM addresses for relay states
-#define EEPROM_SIZE 2 // Total size of EEPROM
-#define RELAY1_ADDR 0   // Address to store relay 1 state
-#define RELAY2_ADDR 1   // Address to store relay 2 state
-void saveRelayState(int addr, bool state); // Function declaration
-// Set your Static IP address
+#define EEPROM_SIZE 2
+#define RELAY1_ADDR 0
+#define RELAY2_ADDR 1
+
+void saveRelayState(int addr, bool state);
+
+// სტატიკური IP კონფიგურაცია
 IPAddress local_IP(192, 168, 1, 101);
-// Set your Gateway IP address
 IPAddress gateway(192, 168, 1, 1);
-
 IPAddress subnet(255, 255, 255, 0);
-IPAddress primaryDNS(8, 8, 8, 8);   //optional
-IPAddress secondaryDNS(8, 8, 4, 4); //optional
+IPAddress primaryDNS(8, 8, 8, 8);
+IPAddress secondaryDNS(8, 8, 4, 4);
+
 AsyncWebServer server(80);
 
 const char* htmlPage = R"=====(
@@ -43,268 +47,182 @@ const char* htmlPage = R"=====(
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Greenhouse dashboard for monitoring and controlling temperature, soil moisture, and air humidity.">
-    <title>Greenhouse</title>
-    <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+    <title>სათბურის მართვის პანელი</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 0;
-            background-color: #f9fbe7;
-            color: #37474f;
-            position: relative;
-        }
-        .container {
-            text-align: center;
-            padding: 10px;
-        }
-        h1 {
-            font-size: 2rem;
-            margin-bottom: 20px;
-            color: #00b436;
-        }
-        .sensor-container {
-            display: flex;
-            justify-content: top;
-            gap: 10px;
-            margin-top: 10px;
-        }
-        .sensor-item {
-            width: calc(33.33% - 20px);
-            padding: 20px;
-            background-color: #c7c7c7;
-            border-radius: 10px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-            text-align: center;
-            transition: background-color 0.3s;
-        }
-        .sensor-item:hover {
-            background-color: #d7d7d7;
-        }
-        .sensor-item {
-            width: calc(50% - 20px); /* Adjust width to fit both items */
-            padding: 20px;
-            background-color: #c7c7c7;
-            border-radius: 10px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-            text-align: center;
-            transition: background-color 0.3s;
-            position: relative; /* Ensure relative positioning for child elements */
+        :root {
+            --bg-color: #f4f7f6;
+            --card-bg: #ffffff;
+            --text-color: #2c3e50;
+            --text-muted: #7f8c8d;
+            --accent-green: #2ecc71;
+            --accent-blue: #3498db;
+            --accent-red: #e74c3c;
+            --accent-brown: #e67e22;
+            --border-radius: 16px;
+            --shadow: 0 10px 25px rgba(0, 0, 0, 0.05);
         }
 
-        .sensor-value-container {
-            display: flex;
-            justify-content: space-around;
-            margin-top: 20px;
-        }
-
-        .sensor-value {
-            width: 100px; /* Adjust width as needed */
-            text-align: center;
-            font-size: 1.5rem;
-            position: relative; /* Ensure relative positioning for absolute positioning of temperature and humidity */
-        }
-        .sensor-value:nth-child(2) {
-            color: #1e88e5; /* Adjust color for humidity */
-        }
-        .sensor-value:before {
-            content: '';
-            position: absolute;
-            left: 50%; /* Adjust position as needed */
-            transform: translateX(-50%);
-            bottom: -10px; /* Adjust spacing between readings */
-            height: 10px;
-            width: 1px;
-             /* Adjust color for separator */
-        }
-        .switch-container {
-            display: inline-block;
-            vertical-align: middle;
-            margin-top: 20px;
-        }
-        .switch-container input[type="checkbox"] {
-            display: none;
-        }
-        .switch-slider {
-            position: relative;
-            display: inline-block;
-            width: 50px;
-            height: 24px;
-            border-radius: 34px;
-            transition: background-color 0.4s;
-            cursor: pointer;
-            background-color: var(--switch-off-color);
-        }
-        .switch-slider:before {
-            content: "";
-            position: absolute;
-            height: 20px;
-            width: 20px;
-            left: 2px;
-            bottom: 2px;
-            background-color: #ffffff;
-            border-radius: 50%;
-            transition: transform 0.4s;
-        }
-        .switch-container input[type="checkbox"]:checked + .switch-slider {
-            background-color: var(--switch-on-color);
-        }
-        .switch-container input[type="checkbox"]:checked + .switch-slider:before {
-            transform: translateX(26px);
-        }
-        .relay-button {
-            padding: 10px 20px;
-            font-size: 1rem;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            margin: 0 10px;
-            transition: background-color 0.3s, color 0.3s, transform 0.2s;
-            background-color: #4caf50;
-            color: white;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-        .relay-button:hover {
-            background-color: #388e3c;
-            transform: translateY(-2px);
-        }
-        .relay-button:focus {
-            outline: none;
-        }
-        .input-graph {
-            margin-top: 10px;
-            position: relative;
-        }
-        .range-dot {
-            position: absolute;
-            height: 10px;
-            width: 10px;
-            background-color: #000;
-            border-radius: 50%;
-            transform: translateX(-50%);
-        }
-        .lower-dot {
-            top: 0;
-        }
-        .upper-dot {
-            top: 0;
-            right: 0;
-        }
-        .sensor-item {
-            position: relative;
-        }
-        #temperatureSensor .range-dot.lower-dot,
-        #moistureSensor .range-dot.lower-dot,
-        #humiditySensor .range-dot.lower-dot {
-            --position: calc((var(--position) / (var(--max) - var(--min))) * 100%);
-            left: var(--position);
-        }
-        #temperatureSensor .range-dot.lower-dot {
-            background-color: #3f51b5;
-        }
-        #moistureSensor .range-dot.lower-dot {
-            background-color: #8bc34a;
-        }
-        #humiditySensor .range-dot.lower-dot {
-            background-color: #ff9800;
-        }
         body.dark-mode {
-            background-color: #303030;
-            color: #e0e0e0;
+            --bg-color: #1a1a2e;
+            --card-bg: #16213e;
+            --text-color: #e9ecef;
+            --text-muted: #a0aec0;
+            --shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
         }
-        .dark-mode .container {
-            background-color: #424242;
-        }
-        .dark-mode h1 {
-            color: #81d4fa;
-        }
-        .dark-mode .sensor-item {
-            background-color: #616161;
-            color: #e0e0e0;
-        }
-        .dark-mode .sensor-value {
-            color: #81d4fa;
-        }
-        .dark-mode .sensor-item p {
-            color: #81d4fa;
-        }
-        .dark-mode .switch-slider {
-            background-color: #595656;
-        }
-        .dark-mode .switch-slider:before {
-            background-color: #757575;
-        }
-        .dark-mode .relay-button {
-            background-color: #81d4fa;
-        }
-        .dark-mode .relay-button:hover {
-            background-color: #4caf50;
-        }
-        #darkModeSwitchContainer {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; transition: background-color 0.3s, color 0.3s; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: var(--bg-color); color: var(--text-color); padding: 20px; min-height: 100vh; }
+        
+        .header { display: flex; justify-content: space-between; align-items: center; max-width: 900px; margin: 0 auto 30px auto; }
+        .header h1 { font-size: 1.8rem; display: flex; align-items: center; gap: 10px; color: var(--accent-green); }
+
+        /* Dark Mode Toggle */
+        .theme-toggle { background: var(--card-bg); border: none; color: var(--text-color); padding: 10px 16px; border-radius: 30px; cursor: pointer; box-shadow: var(--shadow); display: flex; align-items: center; gap: 8px; font-weight: 600; }
+
+        .dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; max-width: 900px; margin: 0 auto; }
+
+        .card { background: var(--card-bg); border-radius: var(--border-radius); padding: 24px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 16px; }
+        .card-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(0,0,0,0.05); padding-bottom: 12px; }
+        .card-title { font-size: 1.1rem; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+
+        .metrics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; text-align: center; margin: 10px 0; }
+        .metric-box { background: rgba(0,0,0,0.02); padding: 15px; border-radius: 12px; }
+        .dark-mode .metric-box { background: rgba(255,255,255,0.03); }
+        .metric-value { font-size: 1.8rem; font-weight: 700; margin-top: 5px; }
+        
+        .temp-color { color: var(--accent-red); }
+        .humid-color { color: var(--accent-blue); }
+        .soil-color { color: var(--accent-brown); }
+
+        /* Controls & Sliders */
+        .control-group { display: flex; flex-direction: column; gap: 8px; font-size: 0.9rem; color: var(--text-muted); }
+        .range-slider { display: flex; align-items: center; gap: 10px; }
+        .range-slider input { flex-grow: 1; accent-color: var(--accent-green); cursor: pointer; }
+        .range-val { font-weight: 600; width: 45px; text-align: right; color: var(--text-color); }
+
+        /* Relay Switch Area */
+        .relay-control { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; padding-top: 15px; border-top: 1px solid rgba(0,0,0,0.05); }
+        .status-badge { padding: 6px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: 600; }
+        .status-badge.on { background: rgba(46, 204, 113, 0.15); color: var(--accent-green); }
+        .status-badge.off { background: rgba(231, 76, 60, 0.15); color: var(--accent-red); }
+
+        .switch { position: relative; display: inline-block; width: 52px; height: 28px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .3s; border-radius: 34px; }
+        .slider:before { position: absolute; content: ""; height: 20px; width: 20px; left: 4px; bottom: 4px; background-color: white; transition: .3s; border-radius: 50%; }
+        input:checked + .slider { background-color: var(--accent-green); }
+        input:checked + .slider:before { transform: translateX(24px); }
     </style>
 </head>
 <body>
-    <div id="darkModeSwitchContainer" class="switch-container">
-        <label class="switch-container" style="--switch-on-color: #030303; --switch-off-color: #bdbdbd;">
-            <input type="checkbox" id="darkModeToggle" onclick="toggleDarkMode()">
-            <span class="switch-slider"></span>
-        </label>
+
+    <div class="header">
+        <h1><i class="fa-solid fa-leaf"></i> სათბურის მართვა</h1>
+        <button class="theme-toggle" onclick="toggleDarkMode()">
+            <i class="fa-solid fa-moon" id="themeIcon"></i>
+            <span id="themeText">მუქი</span>
+        </button>
     </div>
-    <div class="container">
-        <h1>სათბური</h1>
-        <div class="sensor-container">
-            <div class="sensor-item" id="temperatureHumiditySensor">
-                <p>ტემპერატურა და ჰაერის ტენიანობა</p>
-                <div class="sensor-value-container">
-                    <div class="sensor-value" style="color: #e90808;">
-                        <span id="temp">--</span>
-                    </div>
-                    <div class="sensor-value" style="color: #1e88e5;">
-                        <span id="humid">--</span>
-                    </div>
-                </div>
-                <input type="range" id="tempLowerLimit" class="input-graph" min="0" max="50" value="0" oninput="updateLimitDisplay('temp')">
-                <p>Lower Limit: <span id="tempLowerLimitDisplay">0°C</span></p>
-                <input type="range" id="tempLimit" class="input-graph" min="0" max="50" value="0" oninput="updateLimitDisplay('temp')">
-                <p>Upper Limit: <span id="tempLimitDisplay">0°C</span></p>
-                <label class="switch-container" style="--switch-on-color: #e90808; --switch-off-color: #bdbdbd;">
-                    <input type="checkbox" id="heatingToggle" onclick="toggleHeating()">
-                    <span class="switch-slider"></span>
-                </label>
+
+    <div class="dashboard">
+        <!-- Climate Control Card -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title"><i class="fa-solid fa-temperature-three-quarters temp-color"></i> ჰაერის კლიმატი</div>
+                <span id="heatingBadge" class="status-badge off">გათბობა: OFF</span>
             </div>
-            <div class="sensor-item" id="moistureSensor">
-                <p>ნიადაგის ტენიანობა</p>
-                <div class="sensor-value-container">
-                    <div class="sensor-value" style="color: #713c2a;">
-                        <span id="moisture">--</span>
-                    </div>
+            
+            <div class="metrics-grid">
+                <div class="metric-box">
+                    <div>ტემპერატურა</div>
+                    <div id="temp" class="metric-value temp-color">--°C</div>
                 </div>
-                <input type="range" id="moistureLowerLimit" class="input-graph" min="0" max="100" value="0" oninput="updateLimitDisplay('moisture')">
-                <p>Lower Limit: <span id="moistureLowerLimitDisplay">0%</span></p>
-                <input type="range" id="moistureLimit" class="input-graph" min="0" max="100" value="0" oninput="updateLimitDisplay('moisture')">
-                <p>Upper Limit: <span id="moistureLimitDisplay">0%</span></p>
-                <label class="switch-container" style="--switch-on-color: #713c2a; --switch-off-color: #bdbdbd;">
-                    <input type="checkbox" id="wateringToggle" onclick="toggleWatering()">
-                    <span class="switch-slider"></span>
+                <div class="metric-box">
+                    <div>ტენიანობა</div>
+                    <div id="humid" class="metric-value humid-color">--%</div>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label>ქვედა ზღვარი (ჩართვა):</label>
+                <div class="range-slider">
+                    <input type="range" id="tempLowerLimit" min="0" max="50" value="18" oninput="updateLimitDisplay('temp')">
+                    <span id="tempLowerLimitDisplay" class="range-val">18°C</span>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label>ზედა ზღვარი (გამორთვა):</label>
+                <div class="range-slider">
+                    <input type="range" id="tempLimit" min="0" max="50" value="28" oninput="updateLimitDisplay('temp')">
+                    <span id="tempLimitDisplay" class="range-val">28°C</span>
+                </div>
+            </div>
+
+            <div class="relay-control">
+                <span>გათბობის ავტო/ხელით მართვა</span>
+                <label class="switch">
+                    <input type="checkbox" id="heatingToggle" onclick="toggleHeating()">
+                    <span class="slider"></span>
                 </label>
             </div>
         </div>
-        
+
+        <!-- Soil Moisture Card -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title"><i class="fa-solid fa-droplet soil-color"></i> ნიადაგის მორწყვა</div>
+                <span id="wateringBadge" class="status-badge off">მორწყვა: OFF</span>
+            </div>
+
+            <div class="metrics-grid" style="grid-template-columns: 1fr;">
+                <div class="metric-box">
+                    <div>ნიადაგის ტენიანობა</div>
+                    <div id="moisture" class="metric-value soil-color">--%</div>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label>ქვედა ზღვარი (ჩართვა):</label>
+                <div class="range-slider">
+                    <input type="range" id="moistureLowerLimit" min="0" max="100" value="30" oninput="updateLimitDisplay('moisture')">
+                    <span id="moistureLowerLimitDisplay" class="range-val">30%</span>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label>ზედა ზღვარი (გამორთვა):</label>
+                <div class="range-slider">
+                    <input type="range" id="moistureLimit" min="0" max="100" value="70" oninput="updateLimitDisplay('moisture')">
+                    <span id="moistureLimitDisplay" class="range-val">70%</span>
+                </div>
+            </div>
+
+            <div class="relay-control">
+                <span>მორწყვის ავტო/ხელით მართვა</span>
+                <label class="switch">
+                    <input type="checkbox" id="wateringToggle" onclick="toggleWatering()">
+                    <span class="slider"></span>
+                </label>
+            </div>
+        </div>
+    </div>
+
     <script>
         function updateReadings() {
             var xhr = new XMLHttpRequest();
             xhr.onreadystatechange = function() {
                 if (xhr.readyState == XMLHttpRequest.DONE && xhr.status == 200) {
                     var response = JSON.parse(xhr.responseText);
-                    var tempSymbol = '\u00B0C';
-                    document.getElementById("temp").innerText = response.temperature + tempSymbol;
+                    
+                    document.getElementById("temp").innerText = response.temperature.toFixed(1) + '°C';
+                    document.getElementById("humid").innerText = response.humidity.toFixed(1) + "%";
                     document.getElementById("moisture").innerText = response.moisture + "%";
-                    document.getElementById("humid").innerText = response.humidity + " %";
+
+                    // Update Status Badges
+                    updateBadge("heatingBadge", response.heatingState, "გათბობა");
+                    updateBadge("wateringBadge", response.wateringState, "მორწყვა");
 
                     var tempLimit = parseFloat(document.getElementById("tempLimit").value);
                     var tempLowerLimit = parseFloat(document.getElementById("tempLowerLimit").value);
@@ -314,24 +232,20 @@ const char* htmlPage = R"=====(
                     var heatingToggle = document.getElementById("heatingToggle");
                     var wateringToggle = document.getElementById("wateringToggle");
 
+                    // Temperature Logic
                     if (response.temperature > tempLimit && heatingToggle.checked) {
                         heatingToggle.checked = false;
                         toggleHeating(false);
                     } else if (response.temperature < tempLowerLimit && !heatingToggle.checked) {
                         heatingToggle.checked = true;
                         toggleHeating(false);
-                    } else if (response.temperature >= tempLowerLimit && response.temperature <= tempLimit && !heatingToggle.checked) {
-                        heatingToggle.checked = true;
-                        toggleHeating(false);
                     }
 
+                    // Soil Moisture Logic
                     if (response.moisture > moistureLimit && wateringToggle.checked) {
                         wateringToggle.checked = false;
                         toggleWatering(false);
                     } else if (response.moisture < moistureLowerLimit && !wateringToggle.checked) {
-                        wateringToggle.checked = true;
-                        toggleWatering(false);
-                    } else if (response.moisture >= moistureLowerLimit && response.moisture <= moistureLimit && !wateringToggle.checked) {
                         wateringToggle.checked = true;
                         toggleWatering(false);
                     }
@@ -341,23 +255,41 @@ const char* htmlPage = R"=====(
             xhr.send();
         }
 
+        function updateBadge(id, state, label) {
+            var badge = document.getElementById(id);
+            if(state) {
+                badge.innerText = label + ": ON";
+                badge.className = "status-badge on";
+            } else {
+                badge.innerText = label + ": OFF";
+                badge.className = "status-badge off";
+            }
+        }
+
         function updateLimitDisplay(sensor) {
             var lowerLimit = document.getElementById(sensor + 'LowerLimit').value;
             var upperLimit = document.getElementById(sensor + 'Limit').value;
-            var lowerDisplay = document.getElementById(sensor + 'LowerLimitDisplay');
-            var upperDisplay = document.getElementById(sensor + 'LimitDisplay');
-
-            if (sensor === 'temp') {
-                lowerDisplay.innerText = lowerLimit + '°C';
-                upperDisplay.innerText = upperLimit + '°C';
-            } else {
-                lowerDisplay.innerText = lowerLimit + '%';
-                upperDisplay.innerText = upperLimit + '%';
-            }
+            var unit = (sensor === 'temp') ? '°C' : '%';
+            document.getElementById(sensor + 'LowerLimitDisplay').innerText = lowerLimit + unit;
+            document.getElementById(sensor + 'LimitDisplay').innerText = upperLimit + unit;
         }
 
         function toggleDarkMode() {
             document.body.classList.toggle('dark-mode');
+            var isDark = document.body.classList.contains('dark-mode');
+            localStorage.setItem('theme', isDark ? 'dark' : 'light');
+            
+            document.getElementById('themeIcon').className = isDark ? 'fa-solid fa-sun' : 'fa-solid fa-moon';
+            document.getElementById('themeText').innerText = isDark ? 'ნათელი' : 'მუქი';
+        }
+
+        function loadTheme() {
+            var savedTheme = localStorage.getItem('theme');
+            if (savedTheme === 'dark') {
+                document.body.classList.add('dark-mode');
+                document.getElementById('themeIcon').className = 'fa-solid fa-sun';
+                document.getElementById('themeText').innerText = 'ნათელი';
+            }
         }
 
         function toggleHeating(manual = true) {
@@ -381,29 +313,26 @@ const char* htmlPage = R"=====(
         }
 
         function applyToggleState() {
-            var heatingToggle = document.getElementById("heatingToggle");
-            var wateringToggle = document.getElementById("wateringToggle");
             var heatingEnabled = localStorage.getItem("heatingEnabled");
             var wateringEnabled = localStorage.getItem("wateringEnabled");
             if (heatingEnabled !== null) {
-                heatingToggle.checked = heatingEnabled === "true";
+                document.getElementById("heatingToggle").checked = (heatingEnabled === "true");
             }
             if (wateringEnabled !== null) {
-                wateringToggle.checked = wateringEnabled === "true";
+                document.getElementById("wateringToggle").checked = (wateringEnabled === "true");
             }
         }
 
+        loadTheme();
         applyToggleState();
         setInterval(updateReadings, 2000);
     </script>
 </body>
 </html>
-
 )=====";
 
-// Initialize variables for sensor readings
-unsigned long previousMillis = 0; // Variable to store the last time DHT values were updated
-const long interval = 2000; // Interval at which to update DHT values (in milliseconds)
+unsigned long previousMillis = 0;
+const long interval = 2000;
 
 void setup() {
     Serial.begin(115200);
@@ -412,66 +341,76 @@ void setup() {
     pinMode(relayPin2, OUTPUT);
     pinMode(soilMoisturePin, INPUT);
 
-    // Initialize EEPROM with predefined size
     EEPROM.begin(EEPROM_SIZE);
-        // Read saved relay states from EEPROM
-    relayState1 = EEPROM.read(RELAY1_ADDR);
-    relayState2 = EEPROM.read(RELAY2_ADDR);
-    // Set relay pins according to the saved states
+    
+    // EEPROM-იდან მდგომარეობის წაკითხვა და შემოწმება
+    uint8_t r1 = EEPROM.read(RELAY1_ADDR);
+    uint8_t r2 = EEPROM.read(RELAY2_ADDR);
+    
+    relayState1 = (r1 == 1);
+    relayState2 = (r2 == 1);
+
     digitalWrite(relayPin1, relayState1 ? HIGH : LOW);
     digitalWrite(relayPin2, relayState2 ? HIGH : LOW);
 
-   // Configures static IP address
-  if (!WiFi.config(local_IP, gateway, subnet, primaryDNS, secondaryDNS)) {
-    Serial.println("STA Failed to configure");
-  }
-    WiFi.begin(ssid, password);
-    Serial.println("Connecting to WiFi...");
-    while (WiFi.status() != WL_CONNECTED) {
-        delay(1000);
-        Serial.println("Connecting...");
+    if (!WiFi.config(local_IP, gateway, subnet, primaryDNS, secondaryDNS)) {
+        Serial.println("WiFi სტატიკური IP კონფიგურაცია ვერ მოხერხდა");
     }
-    Serial.println("Connected to WiFi");
-    Serial.println(WiFi.localIP());
+    
+    WiFi.begin(ssid, password);
+    Serial.print("უერთდება WiFi-ს");
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(500);
+        Serial.print(".");
+    }
+    Serial.println("\nდაკავშირებულია! IP: " + WiFi.localIP().toString());
 
     dht.begin();
 
+    // მთავარი გვერდი
     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
         request->send(200, "text/html", htmlPage);
     });
 
+    // სენსორების მონაცემების JSON ენდპოინტი
     server.on("/readings", HTTP_GET, [](AsyncWebServerRequest *request) {
         float temperature = dht.readTemperature();
         float humidity = dht.readHumidity();
-        int moisture = analogRead(soilMoisturePin);
+        soilMoistureValue = analogRead(soilMoisturePin);
+        
+        int calculatedPercent = map(soilMoistureValue, AirValue, WaterValue, 0, 100);
+        soilmoisturepercent = constrain(calculatedPercent, 0, 100);
 
         if (isnan(temperature) || isnan(humidity)) {
-            request->send(500, "text/plain", "Failed to read from DHT sensor");
+            request->send(500, "text/plain", "DHT სენსორიდან წაკითხვა ვერ მოხერხდა");
             return;
         }
 
-        // Update relay state based on client connection
-        String response = "{\"temperature\":" + String(temperature) + ",\"humidity\":" + String(humidity) + ",\"moisture\":" + String(map(soilMoistureValue, AirValue, WaterValue, 0, 100)) + ",\"heatingState\":" + String(relayState1) + ",\"wateringState\":" + String(relayState2) + "}";
+        String response = "{\"temperature\":" + String(temperature, 1) + 
+                          ",\"humidity\":" + String(humidity, 1) + 
+                          ",\"moisture\":" + String(soilmoisturepercent) + 
+                          ",\"heatingState\":" + String(relayState1 ? "true" : "false") + 
+                          ",\"wateringState\":" + String(relayState2 ? "true" : "false") + "}";
         request->send(200, "application/json", response);
     });
 
+    // გათბობის რელეს გადართვა
     server.on("/toggleHeating", HTTP_GET, [](AsyncWebServerRequest *request) {
         relayState1 = !relayState1;
         digitalWrite(relayPin1, relayState1 ? HIGH : LOW);
         saveRelayState(RELAY1_ADDR, relayState1);
 
-        String status = relayState1 ? "OFF" : "ON";
-        String response = "{\"status\":\"" + status + "\"}";
+        String response = "{\"status\":\"" + String(relayState1 ? "ON" : "OFF") + "\"}";
         request->send(200, "application/json", response);
     });
 
+    // მორწყვის რელეს გადართვა
     server.on("/toggleWatering", HTTP_GET, [](AsyncWebServerRequest *request) {
         relayState2 = !relayState2;
         digitalWrite(relayPin2, relayState2 ? HIGH : LOW);
         saveRelayState(RELAY2_ADDR, relayState2);
 
-        String status = relayState2 ? "OFF" : "ON";
-        String response = "{\"status\":\"" + status + "\"}";
+        String response = "{\"status\":\"" + String(relayState2 ? "ON" : "OFF") + "\"}";
         request->send(200, "application/json", response);
     });
 
@@ -482,33 +421,22 @@ void loop() {
     unsigned long currentMillis = millis();
     if (currentMillis - previousMillis >= interval) {
         previousMillis = currentMillis;
-        
-        // Read temperature as Celsius (the default)
+
         float newT = dht.readTemperature();
-        if (!isnan(newT)) {
-            t = newT;
-            Serial.println("Temperature: " + String(t));
-        } else {
-            Serial.println("Failed to read temperature from DHT sensor!");
-        }
-
-        // Read humidity
         float newH = dht.readHumidity();
-        if (!isnan(newH)) {
-            h = newH;
-            Serial.println("Humidity: " + String(h));
-        } else {
-            Serial.println("Failed to read humidity from DHT sensor!");
-        }
+        soilMoistureValue = analogRead(soilMoisturePin);
+        soilmoisturepercent = constrain(map(soilMoistureValue, AirValue, WaterValue, 0, 100), 0, 100);
 
-        // Read soil moisture
-        soilMoistureValue = analogRead(soilMoisturePin);  //put Sensor insert into soil
-        soilmoisturepercent = map(soilMoistureValue, AirValue, WaterValue, 0, 100);
-        Serial.println("Soil Moisture: " + String(soilmoisturepercent));
+        if (!isnan(newT)) t = newT;
+        if (!isnan(newH)) h = newH;
+
+        Serial.printf("ტემპერატურა: %.1f°C | ჰაერის ტენიანობა: %.1f%% | ნიადაგის ტენიანობა: %d (%d%%)\n", 
+                      t, h, soilMoistureValue, soilmoisturepercent);
     }
 }
-// Function to save relay state to EEPROM
+
+// EEPROM-ში რელეს მდგომარეობის შენახვა
 void saveRelayState(int addr, bool state) {
-    EEPROM.write(addr, state);
+    EEPROM.write(addr, state ? 1 : 0);
     EEPROM.commit();
 }

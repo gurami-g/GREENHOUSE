@@ -47,249 +47,303 @@ const char* htmlPage = R"=====(
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>სათბურის მართვა Pro</title>
+    <title>სათბურის მართვის პანელი</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         :root {
-            --bg-color: #f0f4f8;
-            --card-bg: #ffffff;
-            --text-main: #1e293b;
-            --text-sub: #64748b;
-            --green: #10b981;
-            --blue: #3b82f6;
-            --red: #ef4444;
-            --orange: #f59e0b;
+            --bg: #f8fafc;
+            --card: #ffffff;
+            --text: #0f172a;
+            --sub: #64748b;
             --border: #e2e8f0;
-            --radius: 18px;
-            --shadow: 0 10px 30px -5px rgba(0,0,0,0.05);
+            --green: #10b981;
+            --blue: #06b6d4;
+            --red: #f43f5e;
+            --amber: #f59e0b;
+            --radius: 20px;
+            --shadow: 0 20px 25px -5px rgba(0,0,0,0.05), 0 8px 10px -6px rgba(0,0,0,0.01);
         }
 
         body.dark-mode {
-            --bg-color: #0f172a;
-            --card-bg: #1e293b;
-            --text-main: #f8fafc;
-            --text-sub: #94a3b8;
-            --border: #334155;
-            --shadow: 0 10px 30px -5px rgba(0,0,0,0.3);
+            --bg: #0b0f19;
+            --card: #151c2c;
+            --text: #f1f5f9;
+            --sub: #94a3b8;
+            --border: #1e293b;
+            --shadow: 0 20px 25px -5px rgba(0,0,0,0.4);
         }
 
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; transition: background 0.3s, color 0.3s; }
-        body { background: var(--bg-color); color: var(--text-main); padding: 20px; min-height: 100vh; }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', system-ui, -apple-system, sans-serif; transition: background 0.3s, color 0.3s; }
+        body { background: var(--bg); color: var(--text); padding: 20px; min-height: 100vh; }
 
-        .header { max-width: 1100px; margin: 0 auto 25px auto; display: flex; justify-content: space-between; align-items: center; }
-        .header h1 { font-size: 1.8rem; font-weight: 700; color: var(--green); display: flex; align-items: center; gap: 12px; }
+        .container { max-width: 1000px; margin: 0 auto; }
+        
+        /* Top Navigation Bar */
+        .navbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; padding: 10px 0; }
+        .brand { display: flex; align-items: center; gap: 12px; font-size: 1.5rem; font-weight: 800; color: var(--green); }
+        .brand i { font-size: 1.8rem; }
+        
+        .nav-actions { display: flex; align-items: center; gap: 15px; }
+        .status-dot { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; font-weight: 600; padding: 6px 14px; border-radius: 20px; background: rgba(16, 185, 129, 0.1); color: var(--green); }
+        .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); animation: pulse 2s infinite; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; } }
 
-        .theme-btn { background: var(--card-bg); border: 1px solid var(--border); color: var(--text-main); padding: 10px 18px; border-radius: 30px; cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 8px; box-shadow: var(--shadow); }
+        .theme-toggle { background: var(--card); border: 1px solid var(--border); color: var(--text); padding: 8px 16px; border-radius: 30px; cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 8px; box-shadow: var(--shadow); }
 
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 24px; max-width: 1100px; margin: 0 auto; }
+        /* Main Dashboard Grid */
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 24px; }
 
-        .card { background: var(--card-bg); border-radius: var(--radius); border: 1px solid var(--border); padding: 24px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 18px; }
-        .card-title { display: flex; justify-content: space-between; align-items: center; font-weight: 700; font-size: 1.1rem; }
-        .card-title i { margin-right: 8px; }
+        .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 20px; }
+        .card-header { display: flex; justify-content: space-between; align-items: center; }
+        .card-title { font-size: 1.1rem; font-weight: 700; display: flex; align-items: center; gap: 10px; }
 
-        .metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-        .metric-card { background: var(--bg-color); border-radius: 12px; padding: 14px; text-align: center; }
-        .metric-title { font-size: 0.85rem; color: var(--text-sub); margin-bottom: 4px; }
-        .metric-val { font-size: 1.6rem; font-weight: 800; }
+        /* Metric Displays & Progress Bars */
+        .metrics-container { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .metric-box { background: rgba(0,0,0,0.02); border-radius: 14px; padding: 16px; position: relative; overflow: hidden; }
+        .dark-mode .metric-box { background: rgba(255,255,255,0.02); }
+        .metric-label { font-size: 0.8rem; color: var(--sub); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+        .metric-value { font-size: 1.8rem; font-weight: 800; margin: 6px 0; }
+        
+        .progress-bg { height: 6px; width: 100%; background: var(--border); border-radius: 3px; overflow: hidden; }
+        .progress-fill { height: 100%; width: 0%; border-radius: 3px; transition: width 0.5s ease; }
 
-        .chart-container { height: 160px; width: 100%; position: relative; }
+        .chart-box { height: 150px; width: 100%; }
 
-        .control-item { display: flex; flex-direction: column; gap: 6px; font-size: 0.9rem; color: var(--text-sub); }
-        .slider-row { display: flex; align-items: center; gap: 12px; }
-        .slider-row input[type=range] { flex: 1; accent-color: var(--green); cursor: pointer; }
-        .val-badge { font-weight: 700; color: var(--text-main); min-width: 45px; text-align: right; }
+        /* Controls & Sliders */
+        .controls { display: flex; flex-direction: column; gap: 12px; }
+        .control-row { display: flex; flex-direction: column; gap: 6px; }
+        .control-label { display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--sub); font-weight: 600; }
+        .control-label span:last-child { color: var(--text); font-weight: 700; }
 
-        .switch-row { display: flex; justify-content: space-between; align-items: center; padding-top: 12px; border-top: 1px solid var(--border); }
-        .badge { padding: 5px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: 700; }
+        input[type=range] { width: 100%; height: 6px; background: var(--border); border-radius: 3px; outline: none; accent-color: var(--green); cursor: pointer; }
+
+        /* Relay Switches */
+        .relay-box { display: flex; justify-content: space-between; align-items: center; padding-top: 15px; border-top: 1px solid var(--border); }
+        .badge { padding: 5px 12px; border-radius: 30px; font-size: 0.75rem; font-weight: 700; }
         .badge.on { background: rgba(16, 185, 129, 0.15); color: var(--green); }
-        .badge.off { background: rgba(239, 68, 68, 0.15); color: var(--red); }
+        .badge.off { background: rgba(244, 63, 94, 0.15); color: var(--red); }
 
-        .toggle-sw { position: relative; width: 50px; height: 26px; }
-        .toggle-sw input { opacity: 0; width: 0; height: 0; }
-        .sw-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: #cbd5e1; transition: .3s; border-radius: 30px; }
-        .sw-slider:before { position: absolute; content: ""; height: 20px; width: 20px; left: 3px; bottom: 3px; background: white; transition: .3s; border-radius: 50%; }
-        input:checked + .sw-slider { background: var(--green); }
-        input:checked + .sw-slider:before { transform: translateX(24px); }
+        .switch { position: relative; width: 48px; height: 26px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #cbd5e1; transition: .3s; border-radius: 34px; }
+        .slider:before { position: absolute; content: ""; height: 20px; width: 20px; left: 3px; bottom: 3px; background-color: white; transition: .3s; border-radius: 50%; }
+        input:checked + .slider { background-color: var(--green); }
+        input:checked + .slider:before { transform: translateX(22px); }
     </style>
 </head>
 <body>
 
-    <div class="header">
-        <h1><i class="fa-solid fa-seedling"></i> სათბურის მართვა</h1>
-        <button class="theme-btn" onclick="toggleTheme()">
-            <i class="fa-solid fa-moon" id="tIcon"></i>
-            <span id="tText">მუქი</span>
-        </button>
-    </div>
-
-    <div class="grid">
-        <!-- Climate Control -->
-        <div class="card">
-            <div class="card-title">
-                <span><i class="fa-solid fa-temperature-arrow-up" style="color: var(--red);"></i> ჰაერის კლიმატი</span>
-                <span id="heatBadge" class="badge off">გათბობა: OFF</span>
+    <div class="container">
+        <!-- Top Nav -->
+        <div class="navbar">
+            <div class="brand">
+                <i class="fa-solid fa-plant-wilt"></i>
+                <span>სათბური Pro</span>
             </div>
-
-            <div class="metrics">
-                <div class="metric-card">
-                    <div class="metric-title">ტემპერატურა</div>
-                    <div id="temp" class="metric-val" style="color: var(--red);">--°C</div>
+            <div class="nav-actions">
+                <div class="status-dot">
+                    <div class="dot"></div>
+                    <span id="connStatus">ONLINE</span>
                 </div>
-                <div class="metric-card">
-                    <div class="metric-title">ჰაერის ტენიანობა</div>
-                    <div id="humid" class="metric-val" style="color: var(--blue);">--%</div>
-                </div>
-            </div>
-
-            <div class="chart-container">
-                <canvas id="climateChart"></canvas>
-            </div>
-
-            <div class="control-item">
-                <label>ქვედა ზღვარი (ჩართვა):</label>
-                <div class="slider-row">
-                    <input type="range" id="tempLowerLimit" min="0" max="50" value="18" oninput="updateLimits('temp')">
-                    <span id="tempLowerLimitDisplay" class="val-badge">18°C</span>
-                </div>
-            </div>
-
-            <div class="control-item">
-                <label>ზედა ზღვარი (გამორთვა):</label>
-                <div class="slider-row">
-                    <input type="range" id="tempLimit" min="0" max="50" value="28" oninput="updateLimits('temp')">
-                    <span id="tempLimitDisplay" class="val-badge">28°C</span>
-                </div>
-            </div>
-
-            <div class="switch-row">
-                <span>გათბობის მართვა</span>
-                <label class="toggle-sw">
-                    <input type="checkbox" id="heatingToggle" onclick="toggleHeating()">
-                    <span class="sw-slider"></span>
-                </label>
+                <button class="theme-toggle" onclick="toggleTheme()">
+                    <i class="fa-solid fa-moon" id="tIcon"></i>
+                </button>
             </div>
         </div>
 
-        <!-- Soil Moisture -->
-        <div class="card">
-            <div class="card-title">
-                <span><i class="fa-solid fa-faucet-drip" style="color: var(--orange);"></i> ნიადაგის მორწყვა</span>
-                <span id="waterBadge" class="badge off">მორწყვა: OFF</span>
-            </div>
+        <!-- Dashboard Grid -->
+        <div class="grid">
+            
+            <!-- Climate Control Card -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">
+                        <i class="fa-solid fa-temperature-half" style="color: var(--red);"></i>
+                        ჰაერის კლიმატი
+                    </div>
+                    <span id="heatBadge" class="badge off">გათბობა: OFF</span>
+                </div>
 
-            <div class="metrics" style="grid-template-columns: 1fr;">
-                <div class="metric-card">
-                    <div class="metric-title">ნიადაგის ტენიანობა</div>
-                    <div id="moisture" class="metric-val" style="color: var(--orange);">--%</div>
+                <div class="metrics-container">
+                    <div class="metric-box">
+                        <div class="metric-label">ტემპერატურა</div>
+                        <div id="temp" class="metric-value" style="color: var(--red);">--°C</div>
+                        <div class="progress-bg"><div id="tempBar" class="progress-fill" style="background: var(--red);"></div></div>
+                    </div>
+                    <div class="metric-box">
+                        <div class="metric-label">ტენიანობა</div>
+                        <div id="humid" class="metric-value" style="color: var(--blue);">--%</div>
+                        <div class="progress-bg"><div id="humidBar" class="progress-fill" style="background: var(--blue);"></div></div>
+                    </div>
+                </div>
+
+                <div class="chart-box">
+                    <canvas id="climateChart"></canvas>
+                </div>
+
+                <div class="controls">
+                    <div class="control-row">
+                        <div class="control-label">
+                            <span>ქვედა ზღვარი (ჩართვა)</span>
+                            <span id="tempLowerLimitDisplay">18°C</span>
+                        </div>
+                        <input type="range" id="tempLowerLimit" min="0" max="50" value="18" oninput="updateLimits('temp')">
+                    </div>
+                    <div class="control-row">
+                        <div class="control-label">
+                            <span>ზედა ზღვარი (გამორთვა)</span>
+                            <span id="tempLimitDisplay">28°C</span>
+                        </div>
+                        <input type="range" id="tempLimit" min="0" max="50" value="28" oninput="updateLimits('temp')">
+                    </div>
+                </div>
+
+                <div class="relay-box">
+                    <span style="font-size: 0.9rem; font-weight: 600;">გათბობის ავტო/ხელით მართვა</span>
+                    <label class="switch">
+                        <input type="checkbox" id="heatingToggle" onclick="toggleHeating()">
+                        <span class="slider"></span>
+                    </label>
                 </div>
             </div>
 
-            <div class="chart-container">
-                <canvas id="soilChart"></canvas>
-            </div>
+            <!-- Soil Moisture Card -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">
+                        <i class="fa-solid fa-droplet" style="color: var(--amber);"></i>
+                        ნიადაგის მორწყვა
+                    </div>
+                    <span id="waterBadge" class="badge off">მორწყვა: OFF</span>
+                </div>
 
-            <div class="control-item">
-                <label>ქვედა ზღვარი (ჩართვა):</label>
-                <div class="slider-row">
-                    <input type="range" id="moistureLowerLimit" min="0" max="100" value="30" oninput="updateLimits('moisture')">
-                    <span id="moistureLowerLimitDisplay" class="val-badge">30%</span>
+                <div class="metrics-container" style="grid-template-columns: 1fr;">
+                    <div class="metric-box">
+                        <div class="metric-label">ნიადაგის ტენიანობა</div>
+                        <div id="moisture" class="metric-value" style="color: var(--amber);">--%</div>
+                        <div class="progress-bg"><div id="soilBar" class="progress-fill" style="background: var(--amber);"></div></div>
+                    </div>
+                </div>
+
+                <div class="chart-box">
+                    <canvas id="soilChart"></canvas>
+                </div>
+
+                <div class="controls">
+                    <div class="control-row">
+                        <div class="control-label">
+                            <span>ქვედა ზღვარი (ჩართვა)</span>
+                            <span id="moistureLowerLimitDisplay">30%</span>
+                        </div>
+                        <input type="range" id="moistureLowerLimit" min="0" max="100" value="30" oninput="updateLimits('moisture')">
+                    </div>
+                    <div class="control-row">
+                        <div class="control-label">
+                            <span>ზედა ზღვარი (გამორთვა)</span>
+                            <span id="moistureLimitDisplay">70%</span>
+                        </div>
+                        <input type="range" id="moistureLimit" min="0" max="100" value="70" oninput="updateLimits('moisture')">
+                    </div>
+                </div>
+
+                <div class="relay-box">
+                    <span style="font-size: 0.9rem; font-weight: 600;">მორწყვის ავტო/ხელით მართვა</span>
+                    <label class="switch">
+                        <input type="checkbox" id="wateringToggle" onclick="toggleWatering()">
+                        <span class="slider"></span>
+                    </label>
                 </div>
             </div>
 
-            <div class="control-item">
-                <label>ზედა ზღვარი (გამორთვა):</label>
-                <div class="slider-row">
-                    <input type="range" id="moistureLimit" min="0" max="100" value="70" oninput="updateLimits('moisture')">
-                    <span id="moistureLimitDisplay" class="val-badge">70%</span>
-                </div>
-            </div>
-
-            <div class="switch-row">
-                <span>მორწყვის მართვა</span>
-                <label class="toggle-sw">
-                    <input type="checkbox" id="wateringToggle" onclick="toggleWatering()">
-                    <span class="sw-slider"></span>
-                </label>
-            </div>
         </div>
     </div>
 
     <script>
-        // Charts Configuration
-        const maxDataPoints = 15;
-        const timeLabels = [];
+        const maxPoints = 12;
+        const labels = [];
 
-        const climateCtx = document.getElementById('climateChart').getContext('2d');
-        const climateChart = new Chart(climateCtx, {
+        // Climate Chart Initialization
+        const cCtx = document.getElementById('climateChart').getContext('2d');
+        const climateChart = new Chart(cCtx, {
             type: 'line',
             data: {
-                labels: timeLabels,
+                labels: labels,
                 datasets: [
-                    { label: 'Temp (°C)', data: [], borderColor: '#ef4444', tension: 0.4, borderWidth: 2, pointRadius: 2 },
-                    { label: 'Humid (%)', data: [], borderColor: '#3b82f6', tension: 0.4, borderWidth: 2, pointRadius: 2 }
+                    { label: 'Temp', data: [], borderColor: '#f43f5e', backgroundColor: 'rgba(244, 63, 94, 0.1)', fill: true, tension: 0.4, borderWidth: 2 },
+                    { label: 'Humid', data: [], borderColor: '#06b6d4', backgroundColor: 'rgba(6, 182, 212, 0.1)', fill: true, tension: 0.4, borderWidth: 2 }
                 ]
             },
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { grid: { display: false } } } }
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { display: false } } }
         });
 
-        const soilCtx = document.getElementById('soilChart').getContext('2d');
-        const soilChart = new Chart(soilCtx, {
+        // Soil Chart Initialization
+        const sCtx = document.getElementById('soilChart').getContext('2d');
+        const soilChart = new Chart(sCtx, {
             type: 'line',
             data: {
-                labels: timeLabels,
+                labels: labels,
                 datasets: [
-                    { label: 'Moisture (%)', data: [], borderColor: '#f59e0b', tension: 0.4, borderWidth: 2, pointRadius: 2 }
+                    { label: 'Soil', data: [], borderColor: '#f59e0b', backgroundColor: 'rgba(245, 158, 11, 0.1)', fill: true, tension: 0.4, borderWidth: 2 }
                 ]
             },
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { min: 0, max: 100, grid: { display: false } } } }
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { min: 0, max: 100, display: false } } }
         });
 
         function updateReadings() {
             var xhr = new XMLHttpRequest();
             xhr.onreadystatechange = function() {
-                if (xhr.readyState == XMLHttpRequest.DONE && xhr.status == 200) {
-                    var data = JSON.parse(xhr.responseText);
+                if (xhr.readyState == XMLHttpRequest.DONE) {
+                    if (xhr.status == 200) {
+                        var data = JSON.parse(xhr.responseText);
 
-                    document.getElementById("temp").innerText = data.temperature.toFixed(1) + '°C';
-                    document.getElementById("humid").innerText = data.humidity.toFixed(1) + "%";
-                    document.getElementById("moisture").innerText = data.moisture + "%";
+                        // Text Updates
+                        document.getElementById("temp").innerText = data.temperature.toFixed(1) + '°C';
+                        document.getElementById("humid").innerText = data.humidity.toFixed(1) + "%";
+                        document.getElementById("moisture").innerText = data.moisture + "%";
 
-                    updateBadge("heatBadge", data.heatingState, "გათბობა");
-                    updateBadge("waterBadge", data.wateringState, "მორწყვა");
+                        // Progress Bar Updates
+                        document.getElementById("tempBar").style.width = Math.min(Math.max((data.temperature / 50) * 100, 0), 100) + "%";
+                        document.getElementById("humidBar").style.width = Math.min(Math.max(data.humidity, 0), 100) + "%";
+                        document.getElementById("soilBar").style.width = Math.min(Math.max(data.moisture, 0), 100) + "%";
 
-                    // Push Chart Data
-                    const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-                    if (timeLabels.length >= maxDataPoints) timeLabels.shift();
-                    timeLabels.push(now);
+                        // Status Badges
+                        updateBadge("heatBadge", data.heatingState, "გათბობა");
+                        updateBadge("waterBadge", data.wateringState, "მორწყვა");
 
-                    if (climateChart.data.datasets[0].data.length >= maxDataPoints) {
-                        climateChart.data.datasets[0].data.shift();
-                        climateChart.data.datasets[1].data.shift();
-                        soilChart.data.datasets[0].data.shift();
+                        // Push Live Data to Charts
+                        const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                        if (labels.length >= maxPoints) labels.shift();
+                        labels.push(timeStr);
+
+                        if (climateChart.data.datasets[0].data.length >= maxPoints) {
+                            climateChart.data.datasets[0].data.shift();
+                            climateChart.data.datasets[1].data.shift();
+                            soilChart.data.datasets[0].data.shift();
+                        }
+
+                        climateChart.data.datasets[0].data.push(data.temperature);
+                        climateChart.data.datasets[1].data.push(data.humidity);
+                        soilChart.data.datasets[0].data.push(data.moisture);
+
+                        climateChart.update();
+                        soilChart.update();
+
+                        // Automation Hysteresis
+                        var tUpper = parseFloat(document.getElementById("tempLimit").value);
+                        var tLower = parseFloat(document.getElementById("tempLowerLimit").value);
+                        var mUpper = parseFloat(document.getElementById("moistureLimit").value);
+                        var mLower = parseFloat(document.getElementById("moistureLowerLimit").value);
+
+                        var hToggle = document.getElementById("heatingToggle");
+                        var wToggle = document.getElementById("wateringToggle");
+
+                        if (data.temperature > tUpper && hToggle.checked) { hToggle.checked = false; toggleHeating(false); }
+                        else if (data.temperature < tLower && !hToggle.checked) { hToggle.checked = true; toggleHeating(false); }
+
+                        if (data.moisture > mUpper && wToggle.checked) { wToggle.checked = false; toggleWatering(false); }
+                        else if (data.moisture < mLower && !wToggle.checked) { wToggle.checked = true; toggleWatering(false); }
                     }
-
-                    climateChart.data.datasets[0].data.push(data.temperature);
-                    climateChart.data.datasets[1].data.push(data.humidity);
-                    soilChart.data.datasets[0].data.push(data.moisture);
-
-                    climateChart.update();
-                    soilChart.update();
-
-                    // Automation Thresholds
-                    var tUpper = parseFloat(document.getElementById("tempLimit").value);
-                    var tLower = parseFloat(document.getElementById("tempLowerLimit").value);
-                    var mUpper = parseFloat(document.getElementById("moistureLimit").value);
-                    var mLower = parseFloat(document.getElementById("moistureLowerLimit").value);
-
-                    var hToggle = document.getElementById("heatingToggle");
-                    var wToggle = document.getElementById("wateringToggle");
-
-                    if (data.temperature > tUpper && hToggle.checked) { hToggle.checked = false; toggleHeating(false); }
-                    else if (data.temperature < tLower && !hToggle.checked) { hToggle.checked = true; toggleHeating(false); }
-
-                    if (data.moisture > mUpper && wToggle.checked) { wToggle.checked = false; toggleWatering(false); }
-                    else if (data.moisture < mLower && !wToggle.checked) { wToggle.checked = true; toggleWatering(false); }
                 }
             };
             xhr.open("GET", "/readings", true);
@@ -315,14 +369,12 @@ const char* htmlPage = R"=====(
             var isDark = document.body.classList.contains('dark-mode');
             localStorage.setItem('theme', isDark ? 'dark' : 'light');
             document.getElementById('tIcon').className = isDark ? 'fa-solid fa-sun' : 'fa-solid fa-moon';
-            document.getElementById('tText').innerText = isDark ? 'ნათელი' : 'მუქი';
         }
 
         function loadTheme() {
             if (localStorage.getItem('theme') === 'dark') {
                 document.body.classList.add('dark-mode');
                 document.getElementById('tIcon').className = 'fa-solid fa-sun';
-                document.getElementById('tText').innerText = 'ნათელი';
             }
         }
 

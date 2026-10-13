@@ -9,7 +9,6 @@
 #include <OneWire.h>
 #include <DallasTemperature.h>
 
-// --- WiFi პარამეტრები ---
 const char* ssid = "MAGTI-1";
 const char* password = "gorgadze12";
 
@@ -19,25 +18,22 @@ IPAddress subnet(255, 255, 255, 0);
 IPAddress primaryDNS(8, 8, 8, 8);
 IPAddress secondaryDNS(8, 8, 4, 4);
 
-// --- პინების განსაზღვრა ---
 #define DHTPIN D1
 #define DHTTYPE DHT22
 DHT dht(DHTPIN, DHTTYPE);
 
-#define ONE_WIRE_BUS D4  // DS18B20 ნიადაგის ტემპერატურის სენსორი
+#define ONE_WIRE_BUS D4
 OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature soilTempSensor(&oneWire);
 
-#define MQ135_PIN D5     // კვამლის/გაზის სენსორი (Digital DO)
+#define MQ135_PIN D5
 
-const int relayPin1 = D6; // გათბობის რელე
-const int relayPin2 = D7; // მორწყვის რელე
+const int relayPin1 = D6; // გათბობა
+const int relayPin2 = D7; // მორწყვა
 
-// --- I2C სენსორები ---
-Adafruit_ADS1115 ads; // I2C ADC მოდული
-BH1750 lightMeter;    // I2C განათების სენსორი
+Adafruit_ADS1115 ads;
+BH1750 lightMeter;
 
-// --- ცვლადები ---
 bool relayState1 = false; 
 bool relayState2 = false; 
 
@@ -49,11 +45,10 @@ int waterLevelPct = 0;
 bool isRaining = false;
 bool gasDetected = false;
 
-// კალიბრაციის მნიშვნელობები ADS1115-ისთვის (16-bit ADC: 0..32767)
-const int SoilAirValue = 18000;   // მშრალი ნიადაგი
-const int SoilWaterValue = 9000;  // სველი ნიადაგი
-const int WaterEmptyValue = 5000;  // ცარიელი ავზი
-const int WaterFullValue = 18000; // სავსე ავზი
+const int SoilAirValue = 18000;
+const int SoilWaterValue = 9000;
+const int WaterEmptyValue = 5000;
+const int WaterFullValue = 18000;
 
 #define EEPROM_SIZE 2
 #define RELAY1_ADDR 0
@@ -69,7 +64,7 @@ const char* htmlPage = R"=====(
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>სათბური - Ultimate Dashboard</title>
+    <title>სათბური - სრული მართვა</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
@@ -84,48 +79,42 @@ const char* htmlPage = R"=====(
             --red: #f43f5e;
             --amber: #f59e0b;
             --purple: #a855f7;
-            --radius: 18px;
-            --shadow: 0 10px 30px -5px rgba(0,0,0,0.4);
+            --radius: 16px;
+            --shadow: 0 10px 25px rgba(0,0,0,0.3);
         }
 
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', system-ui, sans-serif; }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
         body { background: var(--bg); color: var(--text); padding: 20px; min-height: 100vh; }
         .container { max-width: 1200px; margin: 0 auto; }
 
-        .navbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
-        .brand { display: flex; align-items: center; gap: 12px; font-size: 1.6rem; font-weight: 800; color: var(--green); }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
+        .brand { font-size: 1.6rem; font-weight: 800; color: var(--green); display: flex; align-items: center; gap: 10px; }
 
-        .status-pill { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; font-weight: 600; padding: 6px 14px; border-radius: 20px; background: rgba(16, 185, 129, 0.15); color: var(--green); }
-        .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); animation: pulse 2s infinite; }
-        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; } }
+        .status-badge { background: rgba(16, 185, 129, 0.2); color: var(--green); padding: 6px 14px; border-radius: 20px; font-weight: 700; font-size: 0.85rem; }
 
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
 
         .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 15px; }
-        .card-header { display: flex; justify-content: space-between; align-items: center; font-weight: 700; font-size: 1.05rem; }
+        .card-title { font-weight: 700; font-size: 1.1rem; display: flex; justify-content: space-between; align-items: center; }
 
-        .metrics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-        .metric-box { background: rgba(255,255,255,0.03); border-radius: 12px; padding: 12px; }
-        .metric-label { font-size: 0.75rem; color: var(--sub); font-weight: 600; text-transform: uppercase; }
-        .metric-value { font-size: 1.5rem; font-weight: 800; margin-top: 4px; }
+        .val-large { font-size: 2rem; font-weight: 800; margin: 5px 0; }
+        .sub-text { font-size: 0.85rem; color: var(--sub); }
 
-        .progress-bg { height: 6px; width: 100%; background: var(--border); border-radius: 3px; overflow: hidden; margin-top: 8px; }
-        .progress-fill { height: 100%; width: 0%; border-radius: 3px; transition: width 0.5s ease; }
+        .progress-bg { height: 8px; width: 100%; background: var(--border); border-radius: 4px; overflow: hidden; }
+        .progress-fill { height: 100%; width: 0%; border-radius: 4px; transition: width 0.5s ease; }
 
-        .chart-box { height: 130px; width: 100%; }
+        .chart-box { height: 120px; width: 100%; }
 
-        .controls { display: flex; flex-direction: column; gap: 10px; }
+        .controls { display: flex; flex-direction: column; gap: 8px; }
         .control-row { display: flex; flex-direction: column; gap: 4px; }
         .control-label { display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--sub); font-weight: 600; }
-        .control-label span:last-child { color: var(--text); font-weight: 700; }
 
-        input[type=range] { width: 100%; height: 5px; background: var(--border); border-radius: 3px; outline: none; accent-color: var(--green); cursor: pointer; }
+        input[type=range] { width: 100%; height: 6px; background: var(--border); border-radius: 3px; outline: none; accent-color: var(--green); cursor: pointer; }
 
-        .relay-box { display: flex; justify-content: space-between; align-items: center; padding-top: 12px; border-top: 1px solid var(--border); }
+        .relay-box { display: flex; justify-content: space-between; align-items: center; padding-top: 10px; border-top: 1px solid var(--border); }
         .badge { padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; }
         .badge.on { background: rgba(16, 185, 129, 0.2); color: var(--green); }
         .badge.off { background: rgba(244, 63, 94, 0.2); color: var(--red); }
-        .badge.warn { background: rgba(245, 158, 11, 0.2); color: var(--amber); }
 
         .switch { position: relative; width: 44px; height: 24px; }
         .switch input { opacity: 0; width: 0; height: 0; }
@@ -138,41 +127,30 @@ const char* htmlPage = R"=====(
 <body>
 
     <div class="container">
-        <div class="navbar">
-            <div class="brand">
-                <i class="fa-solid fa-leaf"></i>
-                <span>სათბური Pro + Sensors</span>
-            </div>
-            <div class="status-pill">
-                <div class="dot"></div>
-                <span>ONLINE</span>
-            </div>
+        <div class="header">
+            <div class="brand"><i class="fa-solid fa-leaf"></i> სათბური - 6 სენსორი</div>
+            <div class="status-badge">ONLINE</div>
         </div>
 
         <div class="grid">
             
-            <!-- ჰაერის კლიმატი -->
+            <!-- 1. ჰაერის კლიმატი -->
             <div class="card">
-                <div class="card-header">
+                <div class="card-title">
                     <span><i class="fa-solid fa-temperature-half" style="color: var(--red);"></i> ჰაერის კლიმატი</span>
                     <span id="heatBadge" class="badge off">გათბობა: OFF</span>
                 </div>
-
-                <div class="metrics-grid">
-                    <div class="metric-box">
-                        <div class="metric-label">ტემპერატურა</div>
-                        <div id="airTemp" class="metric-value" style="color: var(--red);">--°C</div>
-                        <div class="progress-bg"><div id="airTempBar" class="progress-fill" style="background: var(--red);"></div></div>
+                <div style="display: flex; justify-content: space-between;">
+                    <div>
+                        <div class="sub-text">ტემპერატურა</div>
+                        <div id="airTemp" class="val-large" style="color: var(--red);">--°C</div>
                     </div>
-                    <div class="metric-box">
-                        <div class="metric-label">ტენიანობა</div>
-                        <div id="airHum" class="metric-value" style="color: var(--blue);">--%</div>
-                        <div class="progress-bg"><div id="airHumBar" class="progress-fill" style="background: var(--blue);"></div></div>
+                    <div>
+                        <div class="sub-text">ტენიანობა</div>
+                        <div id="airHum" class="val-large" style="color: var(--blue);">--%</div>
                     </div>
                 </div>
-
                 <div class="chart-box"><canvas id="climateChart"></canvas></div>
-
                 <div class="controls">
                     <div class="control-row">
                         <div class="control-label"><span>ქვედა ზღვარი</span><span id="tempLowerLimitDisplay">18°C</span></div>
@@ -183,9 +161,8 @@ const char* htmlPage = R"=====(
                         <input type="range" id="tempLimit" min="0" max="50" value="28" oninput="updateLimits('temp')">
                     </div>
                 </div>
-
                 <div class="relay-box">
-                    <span style="font-size: 0.85rem; font-weight: 600;">გათბობის მართვა</span>
+                    <span style="font-size: 0.85rem; font-weight: 600;">გათბობის რელე</span>
                     <label class="switch">
                         <input type="checkbox" id="heatingToggle" onclick="toggleHeating()">
                         <span class="slider"></span>
@@ -193,28 +170,23 @@ const char* htmlPage = R"=====(
                 </div>
             </div>
 
-            <!-- ნიადაგი და მორწყვა -->
+            <!-- 2. ნიადაგი & ფესვები -->
             <div class="card">
-                <div class="card-header">
-                    <span><i class="fa-solid fa-droplet" style="color: var(--amber);"></i> ნიადაგი და მორწყვა</span>
+                <div class="card-title">
+                    <span><i class="fa-solid fa-droplet" style="color: var(--amber);"></i> ნიადაგი & ფესვები</span>
                     <span id="waterBadge" class="badge off">მორწყვა: OFF</span>
                 </div>
-
-                <div class="metrics-grid">
-                    <div class="metric-box">
-                        <div class="metric-label">ნიადაგის ტენიანობა</div>
-                        <div id="soilMoist" class="metric-value" style="color: var(--amber);">--%</div>
-                        <div class="progress-bg"><div id="soilMoistBar" class="progress-fill" style="background: var(--amber);"></div></div>
+                <div style="display: flex; justify-content: space-between;">
+                    <div>
+                        <div class="sub-text">ნიადაგის ტენიანობა</div>
+                        <div id="soilMoist" class="val-large" style="color: var(--amber);">--%</div>
                     </div>
-                    <div class="metric-box">
-                        <div class="metric-label">ფესვების ტემპ.</div>
-                        <div id="soilTemp" class="metric-value" style="color: var(--purple);">--°C</div>
-                        <div class="progress-bg"><div id="soilTempBar" class="progress-fill" style="background: var(--purple);"></div></div>
+                    <div>
+                        <div class="sub-text">ფესვების ტემპ.</div>
+                        <div id="soilTemp" class="val-large" style="color: var(--purple);">--°C</div>
                     </div>
                 </div>
-
                 <div class="chart-box"><canvas id="soilChart"></canvas></div>
-
                 <div class="controls">
                     <div class="control-row">
                         <div class="control-label"><span>ქვედა ზღვარი</span><span id="moistureLowerLimitDisplay">30%</span></div>
@@ -225,9 +197,8 @@ const char* htmlPage = R"=====(
                         <input type="range" id="moistureLimit" min="0" max="100" value="70" oninput="updateLimits('moisture')">
                     </div>
                 </div>
-
                 <div class="relay-box">
-                    <span style="font-size: 0.85rem; font-weight: 600;">მორწყვის მართვა</span>
+                    <span style="font-size: 0.85rem; font-weight: 600;">მორწყვის რელე</span>
                     <label class="switch">
                         <input type="checkbox" id="wateringToggle" onclick="toggleWatering()">
                         <span class="slider"></span>
@@ -235,66 +206,68 @@ const char* htmlPage = R"=====(
                 </div>
             </div>
 
-            <!-- გარემო და ავზი -->
+            <!-- 3. განათების სენსორი -->
             <div class="card">
-                <div class="card-header">
-                    <span><i class="fa-solid fa-sun" style="color: #eab308;"></i> გარემო და უსაფრთხოება</span>
+                <div class="card-title">
+                    <span><i class="fa-solid fa-sun" style="color: #eab308;"></i> განათება (BH1750)</span>
                 </div>
+                <div class="sub-text">სინათლის ინტენსივობა</div>
+                <div id="lux" class="val-large" style="color: #eab308;">-- Lux</div>
+                <div class="progress-bg"><div id="luxBar" class="progress-fill" style="background: #eab308;"></div></div>
+            </div>
 
-                <div class="metrics-grid">
-                    <div class="metric-box">
-                        <div class="metric-label">განათება (Lux)</div>
-                        <div id="lux" class="metric-value" style="color: #eab308;">-- Lux</div>
-                    </div>
-                    <div class="metric-box">
-                        <div class="metric-label">წყალი ავზში</div>
-                        <div id="waterLevel" class="metric-value" style="color: var(--blue);">--%</div>
-                        <div class="progress-bg"><div id="waterLevelBar" class="progress-fill" style="background: var(--blue);"></div></div>
-                    </div>
+            <!-- 4. წყლის ავზი -->
+            <div class="card">
+                <div class="card-title">
+                    <span><i class="fa-solid fa-faucet-drip" style="color: var(--blue);"></i> წყლის ავზი</span>
                 </div>
+                <div class="sub-text">ავზის შევსების დონე</div>
+                <div id="waterLevel" class="val-large" style="color: var(--blue);">--%</div>
+                <div class="progress-bg"><div id="waterBar" class="progress-fill" style="background: var(--blue);"></div></div>
+            </div>
 
-                <div class="metrics-grid" style="margin-top: 10px;">
-                    <div class="metric-box">
-                        <div class="metric-label">წვიმის სტატუსი</div>
-                        <div id="rainStatus" class="metric-value" style="font-size: 1.1rem; color: var(--sub);">--</div>
-                    </div>
-                    <div class="metric-box">
-                        <div class="metric-label">კვამლი / გაზი</div>
-                        <div id="gasStatus" class="metric-value" style="font-size: 1.1rem; color: var(--green);">ნორმა</div>
-                    </div>
+            <!-- 5. წვიმის სენსორი -->
+            <div class="card">
+                <div class="card-title">
+                    <span><i class="fa-solid fa-cloud-rain" style="color: var(--blue);"></i> ნალექი</span>
                 </div>
+                <div class="sub-text">წვიმის სტატუსი</div>
+                <div id="rainStatus" class="val-large" style="color: var(--sub);">--</div>
+            </div>
+
+            <!-- 6. უსაფრთხოება -->
+            <div class="card">
+                <div class="card-title">
+                    <span><i class="fa-solid fa-shield-halved" style="color: var(--red);"></i> გაზი / კვამლი</span>
+                </div>
+                <div class="sub-text">ჰაერის უსაფრთხოება (MQ-135)</div>
+                <div id="gasStatus" class="val-large" style="color: var(--green);">ნორმა</div>
             </div>
 
         </div>
     </div>
 
     <script>
-        const maxPoints = 12;
+        const maxPoints = 10;
         const labels = [];
 
         const cCtx = document.getElementById('climateChart').getContext('2d');
         const climateChart = new Chart(cCtx, {
             type: 'line',
-            data: {
-                labels: labels,
-                datasets: [
-                    { label: 'Temp', data: [], borderColor: '#f43f5e', fill: false, tension: 0.4, borderWidth: 2 },
-                    { label: 'Humid', data: [], borderColor: '#06b6d4', fill: false, tension: 0.4, borderWidth: 2 }
-                ]
-            },
+            data: { labels: labels, datasets: [
+                { label: 'T', data: [], borderColor: '#f43f5e', fill: false, tension: 0.3 },
+                { label: 'H', data: [], borderColor: '#06b6d4', fill: false, tension: 0.3 }
+            ]},
             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { display: false } } }
         });
 
         const sCtx = document.getElementById('soilChart').getContext('2d');
         const soilChart = new Chart(sCtx, {
             type: 'line',
-            data: {
-                labels: labels,
-                datasets: [
-                    { label: 'Soil Moist', data: [], borderColor: '#f59e0b', fill: false, tension: 0.4, borderWidth: 2 },
-                    { label: 'Soil Temp', data: [], borderColor: '#a855f7', fill: false, tension: 0.4, borderWidth: 2 }
-                ]
-            },
+            data: { labels: labels, datasets: [
+                { label: 'SM', data: [], borderColor: '#f59e0b', fill: false, tension: 0.3 },
+                { label: 'ST', data: [], borderColor: '#a855f7', fill: false, tension: 0.3 }
+            ]},
             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { display: false } } }
         });
 
@@ -304,7 +277,6 @@ const char* htmlPage = R"=====(
                 if (xhr.readyState == XMLHttpRequest.DONE && xhr.status == 200) {
                     var data = JSON.parse(xhr.responseText);
 
-                    // Text values
                     document.getElementById("airTemp").innerText = data.airTemp.toFixed(1) + '°C';
                     document.getElementById("airHum").innerText = data.airHum.toFixed(1) + "%";
                     document.getElementById("soilMoist").innerText = data.soilMoist + "%";
@@ -312,25 +284,16 @@ const char* htmlPage = R"=====(
                     document.getElementById("lux").innerText = Math.round(data.lux) + " Lux";
                     document.getElementById("waterLevel").innerText = data.waterLevel + "%";
 
-                    // Status indicators
-                    document.getElementById("rainStatus").innerText = data.isRaining ? "წვიმს 🌧️" : "მშრალი ☀️";
-                    document.getElementById("rainStatus").style.color = data.isRaining ? "var(--blue)" : "var(--sub)";
+                    document.getElementById("luxBar").style.width = Math.min((data.lux / 50000) * 100, 100) + "%";
+                    document.getElementById("waterBar").style.width = Math.min(Math.max(data.waterLevel, 0), 100) + "%";
 
+                    document.getElementById("rainStatus").innerText = data.isRaining ? "წვიმს 🌧️" : "მშრალია ☀️";
                     document.getElementById("gasStatus").innerText = data.gasDetected ? "საფრთხე! 🚨" : "ნორმა ✅";
                     document.getElementById("gasStatus").style.color = data.gasDetected ? "var(--red)" : "var(--green)";
 
-                    // Bars
-                    document.getElementById("airTempBar").style.width = Math.min(Math.max((data.airTemp / 50) * 100, 0), 100) + "%";
-                    document.getElementById("airHumBar").style.width = Math.min(Math.max(data.airHum, 0), 100) + "%";
-                    document.getElementById("soilMoistBar").style.width = Math.min(Math.max(data.soilMoist, 0), 100) + "%";
-                    document.getElementById("soilTempBar").style.width = Math.min(Math.max((data.soilTemp / 50) * 100, 0), 100) + "%";
-                    document.getElementById("waterLevelBar").style.width = Math.min(Math.max(data.waterLevel, 0), 100) + "%";
-
-                    // Badges
                     updateBadge("heatBadge", data.heatingState, "გათბობა");
                     updateBadge("waterBadge", data.wateringState, "მორწყვა");
 
-                    // Charts Update
                     const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                     if (labels.length >= maxPoints) labels.shift();
                     labels.push(timeStr);
@@ -349,30 +312,10 @@ const char* htmlPage = R"=====(
 
                     climateChart.update();
                     soilChart.update();
-
-                    // Automation Logic with Safety Protection
-                    var tUpper = parseFloat(document.getElementById("tempLimit").value);
-                    var tLower = parseFloat(document.getElementById("tempLowerLimit").value);
-                    var mUpper = parseFloat(document.getElementById("moistureLimit").value);
-                    var mLower = parseFloat(document.getElementById("moistureLowerLimit").value);
-
-                    var hToggle = document.getElementById("heatingToggle");
-                    var wToggle = document.getElementById("wateringToggle");
-
-                    if (data.airTemp > tUpper && hToggle.checked) { hToggle.checked = false; toggleHeating(false); }
-                    else if (data.airTemp < tLower && !hToggle.checked) { hToggle.checked = true; toggleHeating(false); }
-
-                    // მორწყვის გათიშვა თუ ავზში წყალი < 10%-ზეა (ტუმბოს დაცვა)
-                    if (data.waterLevel < 10 && wToggle.checked) {
-                        wToggle.checked = false;
-                        toggleWatering(false);
-                    } else {
-                        if (data.soilMoist > mUpper && wToggle.checked) { wToggle.checked = false; toggleWatering(false); }
-                        else if (data.soilMoist < mLower && !wToggle.checked) { wToggle.checked = true; toggleWatering(false); }
-                    }
                 }
             };
-            xhr.open("GET", "/readings", true);
+            // Cache-Busting მოთხოვნა
+            xhr.open("GET", "/readings?t=" + new Date().getTime(), true);
             xhr.send();
         }
 
@@ -390,28 +333,18 @@ const char* htmlPage = R"=====(
             document.getElementById(type + 'LimitDisplay').innerText = up + unit;
         }
 
-        function toggleHeating(manual = true) {
+        function toggleHeating() {
             var xhr = new XMLHttpRequest();
             xhr.open("GET", "/toggleHeating", true);
             xhr.send();
-            if (manual) localStorage.setItem("heatingEnabled", document.getElementById("heatingToggle").checked);
         }
 
-        function toggleWatering(manual = true) {
+        function toggleWatering() {
             var xhr = new XMLHttpRequest();
             xhr.open("GET", "/toggleWatering", true);
             xhr.send();
-            if (manual) localStorage.setItem("wateringEnabled", document.getElementById("wateringToggle").checked);
         }
 
-        function applySavedToggles() {
-            var h = localStorage.getItem("heatingEnabled");
-            var w = localStorage.getItem("wateringEnabled");
-            if (h !== null) document.getElementById("heatingToggle").checked = (h === "true");
-            if (w !== null) document.getElementById("wateringToggle").checked = (w === "true");
-        }
-
-        applySavedToggles();
         setInterval(updateReadings, 2000);
     </script>
 </body>
@@ -426,8 +359,7 @@ void setup() {
     pinMode(relayPin1, OUTPUT);
     pinMode(relayPin2, OUTPUT);
 
-    // I2C და სენსორების ინიციალიზაცია
-    Wire.begin(D2, D3); // SDA = D2, SCL = D3
+    Wire.begin(D2, D3);
     
     if (!ads.begin()) {
         Serial.println("ADS1115 ვერ მოიძებნა!");
@@ -436,7 +368,6 @@ void setup() {
     lightMeter.begin(BH1750::CONTINUOUS_HIGH_RES_MODE);
     soilTempSensor.begin();
 
-    // EEPROM-ის ინიციალიზაცია
     EEPROM.begin(EEPROM_SIZE);
     uint8_t r1 = EEPROM.read(RELAY1_ADDR);
     uint8_t r2 = EEPROM.read(RELAY2_ADDR);
@@ -447,54 +378,42 @@ void setup() {
     digitalWrite(relayPin1, relayState1 ? HIGH : LOW);
     digitalWrite(relayPin2, relayState2 ? HIGH : LOW);
 
-    // WiFi მიერთება
     if (!WiFi.config(local_IP, gateway, subnet, primaryDNS, secondaryDNS)) {
-        Serial.println("WiFi სტატიკური IP კონფიგურაცია ვერ მოხერხდა");
+        Serial.println("WiFi IP კონფიგურაცია ვერ მოხერხდა");
     }
     
     WiFi.begin(ssid, password);
-    Serial.print("უერთდება WiFi-ს");
     while (WiFi.status() != WL_CONNECTED) {
         delay(500);
-        Serial.print(".");
     }
-    Serial.println("\nდაკავშირებულია! IP: " + WiFi.localIP().toString());
 
     dht.begin();
 
-    // HTTP Routes
     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
         request->send(200, "text/html", htmlPage);
     });
 
     server.on("/readings", HTTP_GET, [](AsyncWebServerRequest *request) {
-        // DHT22 წაკითხვა
         float tRead = dht.readTemperature();
         float hRead = dht.readHumidity();
         if (!isnan(tRead)) airTemp = tRead;
         if (!isnan(hRead)) airHum = hRead;
 
-        // DS18B20 წაკითხვა
         soilTempSensor.requestTemperatures();
         float stRead = soilTempSensor.getTempCByIndex(0);
         if (stRead > -55 && stRead < 125) soilTemp = stRead;
 
-        // BH1750 წაკითხვა
         lux = lightMeter.readLightLevel();
+        gasDetected = (digitalRead(MQ135_PIN) == LOW);
 
-        // MQ-135 კვამლის სენსორი
-        gasDetected = (digitalRead(MQ135_PIN) == LOW); // LOW = კვამლი/გაზი დაფიქსირდა
-
-        // ADS1115 არხების წაკითხვა
-        int16_t adc0 = ads.readADC_SingleEnded(0); // ნიადაგის ტენიანობა
-        int16_t adc1 = ads.readADC_SingleEnded(1); // წყლის დონე
-        int16_t adc2 = ads.readADC_SingleEnded(2); // წვიმის სენსორი
+        int16_t adc0 = ads.readADC_SingleEnded(0);
+        int16_t adc1 = ads.readADC_SingleEnded(1);
+        int16_t adc2 = ads.readADC_SingleEnded(2);
 
         soilMoisturePct = constrain(map(adc0, SoilAirValue, SoilWaterValue, 0, 100), 0, 100);
         waterLevelPct = constrain(map(adc1, WaterEmptyValue, WaterFullValue, 0, 100), 0, 100);
-        isRaining = (adc2 < 12000); // თუ 12000-ზე ნაკლებია, სველია (წვიმს)
+        isRaining = (adc2 < 12000);
 
-        // JSON პასუხი
         String response = "{";
         response += "\"airTemp\":" + String(airTemp, 1) + ",";
         response += "\"airHum\":" + String(airHum, 1) + ",";
@@ -529,7 +448,6 @@ void setup() {
 }
 
 void loop() {
-    // AsyncWebServer-ის დროს loop() ცარიელია და არ აფერხებს ვებ-სერვერს
 }
 
 void saveRelayState(int addr, bool state) {

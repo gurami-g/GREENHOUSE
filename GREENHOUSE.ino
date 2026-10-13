@@ -30,9 +30,9 @@ DallasTemperature soilTempSensor(&oneWire);
 
 #define MQ135_PIN D5      // გაზი/კვამლი (Digital DO)
 
-const int relayPin1 = D6;    // ჰაერის გათბობის რელე
-const int relayPin2 = D7;    // მორწყვის რელე
-const int relayPinSoil = D8; // ნიადაგის გამათბობელი კაბელის რელე
+const int relayPin1 = D6;    // Relay 1: ჰაერის გათბობა
+const int relayPinSoil = D7; // Relay 2: ნიადაგის გათბობის კაბელი (ადგილები გაიცვალა)
+const int relayPinWater = D8; // Relay 3: მორწყვა (ადგილები გაიცვალა)
 
 // --- I2C მოდულები ---
 Adafruit_ADS1115 ads;
@@ -40,8 +40,8 @@ BH1750 lightMeter;
 
 // --- ცვლადები ---
 bool relayState1 = false; 
-bool relayState2 = false; 
 bool relayStateSoil = false;
+bool relayStateWater = false; 
 
 float airTemp = 0.0, airHum = 0.0;
 float soilTemp = 0.0;
@@ -59,8 +59,8 @@ const int WaterFullValue = 18000;
 
 #define EEPROM_SIZE 3
 #define RELAY1_ADDR 0
-#define RELAY2_ADDR 1
-#define RELAY_SOIL_ADDR 2
+#define RELAY_SOIL_ADDR 1
+#define RELAY_WATER_ADDR 2
 
 void saveRelayState(int addr, bool state);
 
@@ -72,23 +72,23 @@ const char* htmlPage = R"=====(
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>სათბურის მართვა Pro</title>
+    <title>სათბური Pro</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         :root {
-            --bg: #f8fafc;
-            --card: #ffffff;
-            --text: #0f172a;
-            --sub: #64748b;
-            --border: #e2e8f0;
+            --bg: #0f172a;
+            --card: #1e293b;
+            --text: #f8fafc;
+            --sub: #94a3b8;
+            --border: #334155;
             --green: #10b981;
             --blue: #06b6d4;
             --red: #f43f5e;
             --amber: #f59e0b;
             --purple: #a855f7;
             --radius: 16px;
-            --shadow: 0 10px 25px rgba(0,0,0,0.05);
+            --shadow: 0 10px 25px rgba(0,0,0,0.3);
         }
 
         body.dark-mode {
@@ -124,11 +124,21 @@ const char* htmlPage = R"=====(
 
         .chart-box { height: 120px; width: 100%; }
 
-        .controls { display: flex; flex-direction: column; gap: 8px; }
-        .control-row { display: flex; flex-direction: column; gap: 4px; }
-        .control-label { display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--sub); font-weight: 600; }
-
-        input[type=range] { width: 100%; height: 6px; background: var(--border); border-radius: 3px; outline: none; accent-color: var(--green); cursor: pointer; }
+        /* --- Dual Range Slider Style --- */
+        .range-wrapper { display: flex; flex-direction: column; gap: 8px; }
+        .range-header { display: flex; justify-content: space-between; font-size: 0.85rem; font-weight: 600; color: var(--sub); }
+        .range-header span.val { color: var(--green); font-weight: 700; }
+        .dual-slider { position: relative; width: 100%; height: 6px; background: var(--border); border-radius: 3px; }
+        .dual-slider .slider-track { position: absolute; height: 100%; background: var(--green); border-radius: 3px; }
+        .dual-slider input[type="range"] {
+            position: absolute; width: 100%; height: 6px; top: 0; background: none; pointer-events: none; -webkit-appearance: none; appearance: none;
+        }
+        .dual-slider input[type="range"]::-webkit-slider-thumb {
+            height: 18px; width: 18px; border-radius: 50%; background: var(--text); border: 2px solid var(--green); pointer-events: auto; -webkit-appearance: none; cursor: pointer;
+        }
+        .dual-slider input[type="range"]::-moz-range-thumb {
+            height: 18px; width: 18px; border-radius: 50%; background: var(--text); border: 2px solid var(--green); pointer-events: auto; cursor: pointer;
+        }
 
         .relay-box { display: flex; justify-content: space-between; align-items: center; padding-top: 10px; border-top: 1px solid var(--border); }
         .badge { padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; }
@@ -176,16 +186,20 @@ const char* htmlPage = R"=====(
                     </div>
                 </div>
                 <div class="chart-box"><canvas id="climateChart"></canvas></div>
-                <div class="controls">
-                    <div class="control-row">
-                        <div class="control-label"><span>ქვედა ზღვარი</span><span id="tempLowerLimitDisplay">18°C</span></div>
-                        <input type="range" id="tempLowerLimit" min="0" max="50" value="18" oninput="updateLimits('temp')">
+
+                <!-- ერთ ვიზუალში გაერთიანებული ზღვრები -->
+                <div class="range-wrapper">
+                    <div class="range-header">
+                        <span>ტემპერატურის ზღვარი</span>
+                        <span class="val"><span id="tempMinLabel">18</span>°C - <span id="tempMaxLabel">28</span>°C</span>
                     </div>
-                    <div class="control-row">
-                        <div class="control-label"><span>ზედა ზღვარი</span><span id="tempLimitDisplay">28°C</span></div>
-                        <input type="range" id="tempLimit" min="0" max="50" value="28" oninput="updateLimits('temp')">
+                    <div class="dual-slider">
+                        <div class="slider-track" id="tempTrack"></div>
+                        <input type="range" id="tempMin" min="0" max="50" value="18" oninput="slideDual('temp', 'Min')">
+                        <input type="range" id="tempMax" min="0" max="50" value="28" oninput="slideDual('temp', 'Max')">
                     </div>
                 </div>
+
                 <div class="relay-box">
                     <span style="font-size: 0.85rem; font-weight: 600;">ჰაერის გათბობა (Relay 1)</span>
                     <label class="switch">
@@ -195,7 +209,7 @@ const char* htmlPage = R"=====(
                 </div>
             </div>
 
-            <!-- 2. ნიადაგის გათბობა -->
+            <!-- 2. ნიადაგის გათბობა (Relay 2) -->
             <div class="card">
                 <div class="card-title">
                     <span><i class="fa-solid fa-fire-flame-curved" style="color: var(--purple);"></i> ნიადაგის გათბობა</span>
@@ -205,18 +219,22 @@ const char* htmlPage = R"=====(
                     <div class="sub-text">ფესვების ტემპერატურა (DS18B20)</div>
                     <div id="soilTemp" class="val-large" style="color: var(--purple);">--°C</div>
                 </div>
-                <div class="controls">
-                    <div class="control-row">
-                        <div class="control-label"><span>ქვედა ზღვარი</span><span id="soilTempLowerLimitDisplay">18°C</span></div>
-                        <input type="range" id="soilTempLowerLimit" min="0" max="40" value="18" oninput="updateLimits('soilTemp')">
+
+                <!-- ერთ ვიზუალში გაერთიანებული ზღვრები -->
+                <div class="range-wrapper">
+                    <div class="range-header">
+                        <span>ტემპერატურის ზღვარი</span>
+                        <span class="val"><span id="soilTempMinLabel">18</span>°C - <span id="soilTempMaxLabel">22</span>°C</span>
                     </div>
-                    <div class="control-row">
-                        <div class="control-label"><span>ზედა ზღვარი</span><span id="soilTempLimitDisplay">22°C</span></div>
-                        <input type="range" id="soilTempLimit" min="0" max="40" value="22" oninput="updateLimits('soilTemp')">
+                    <div class="dual-slider">
+                        <div class="slider-track" id="soilTempTrack"></div>
+                        <input type="range" id="soilTempMin" min="0" max="40" value="18" oninput="slideDual('soilTemp', 'Min')">
+                        <input type="range" id="soilTempMax" min="0" max="40" value="22" oninput="slideDual('soilTemp', 'Max')">
                     </div>
                 </div>
+
                 <div class="relay-box">
-                    <span style="font-size: 0.85rem; font-weight: 600;">გამათბობელი კაბელი (Relay 3)</span>
+                    <span style="font-size: 0.85rem; font-weight: 600;">გამათბობელი კაბელი (Relay 2)</span>
                     <label class="switch">
                         <input type="checkbox" id="soilHeatingToggle" onclick="toggleSoilHeating()">
                         <span class="slider"></span>
@@ -224,7 +242,7 @@ const char* htmlPage = R"=====(
                 </div>
             </div>
 
-            <!-- 3. ნიადაგის მორწყვა -->
+            <!-- 3. ნიადაგის მორწყვა (Relay 3) -->
             <div class="card">
                 <div class="card-title">
                     <span><i class="fa-solid fa-droplet" style="color: var(--amber);"></i> ნიადაგის მორწყვა</span>
@@ -235,18 +253,22 @@ const char* htmlPage = R"=====(
                     <div id="soilMoist" class="val-large" style="color: var(--amber);">--%</div>
                 </div>
                 <div class="chart-box"><canvas id="soilChart"></canvas></div>
-                <div class="controls">
-                    <div class="control-row">
-                        <div class="control-label"><span>ქვედა ზღვარი</span><span id="moistureLowerLimitDisplay">30%</span></div>
-                        <input type="range" id="moistureLowerLimit" min="0" max="100" value="30" oninput="updateLimits('moisture')">
+
+                <!-- ერთ ვიზუალში გაერთიანებული ზღვრები -->
+                <div class="range-wrapper">
+                    <div class="range-header">
+                        <span>ტენიანობის ზღვარი</span>
+                        <span class="val"><span id="moistMinLabel">30</span>% - <span id="moistMaxLabel">70</span>%</span>
                     </div>
-                    <div class="control-row">
-                        <div class="control-label"><span>ზედა ზღვარი</span><span id="moistureLimitDisplay">70%</span></div>
-                        <input type="range" id="moistureLimit" min="0" max="100" value="70" oninput="updateLimits('moisture')">
+                    <div class="dual-slider">
+                        <div class="slider-track" id="moistTrack"></div>
+                        <input type="range" id="moistMin" min="0" max="100" value="30" oninput="slideDual('moist', 'Min')">
+                        <input type="range" id="moistMax" min="0" max="100" value="70" oninput="slideDual('moist', 'Max')">
                     </div>
                 </div>
+
                 <div class="relay-box">
-                    <span style="font-size: 0.85rem; font-weight: 600;">მორწყვის რელე (Relay 2)</span>
+                    <span style="font-size: 0.85rem; font-weight: 600;">მორწყვის რელე (Relay 3)</span>
                     <label class="switch">
                         <input type="checkbox" id="wateringToggle" onclick="toggleWatering()">
                         <span class="slider"></span>
@@ -317,6 +339,29 @@ const char* htmlPage = R"=====(
             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { display: false } } }
         });
 
+        function slideDual(prefix, changed) {
+            let minEl = document.getElementById(prefix + 'Min');
+            let maxEl = document.getElementById(prefix + 'Max');
+            let minVal = parseInt(minEl.value);
+            let maxVal = parseInt(maxEl.value);
+
+            if (minVal >= maxVal) {
+                if (changed === 'Min') minEl.value = maxVal - 1;
+                else maxEl.value = minVal + 1;
+            }
+
+            document.getElementById(prefix + 'MinLabel').innerText = minEl.value;
+            document.getElementById(prefix + 'MaxLabel').innerText = maxEl.value;
+
+            // Track Fill Update
+            let track = document.getElementById(prefix + 'Track');
+            let maxRange = parseInt(minEl.max);
+            let leftPct = (minEl.value / maxRange) * 100;
+            let rightPct = 100 - ((maxEl.value / maxRange) * 100);
+            track.style.left = leftPct + '%';
+            track.style.right = rightPct + '%';
+        }
+
         function updateReadings() {
             var xhr = new XMLHttpRequest();
             xhr.onreadystatechange = function() {
@@ -338,26 +383,26 @@ const char* htmlPage = R"=====(
                     document.getElementById("gasStatus").style.color = data.gasDetected ? "var(--red)" : "var(--green)";
 
                     updateBadge("heatBadge", data.heatingState, "გათბობა");
-                    updateBadge("waterBadge", data.wateringState, "მორწყვა");
                     updateBadge("soilHeatBadge", data.soilHeatingState, "კაბელი");
+                    updateBadge("waterBadge", data.wateringState, "მორწყვა");
 
-                    // 1. ჰაერის გათბობის ავტომატიზაცია
-                    var tUpper = parseFloat(document.getElementById("tempLimit").value);
-                    var tLower = parseFloat(document.getElementById("tempLowerLimit").value);
+                    // 1. ჰაერის გათბობა
+                    var tUpper = parseFloat(document.getElementById("tempMax").value);
+                    var tLower = parseFloat(document.getElementById("tempMin").value);
                     var hToggle = document.getElementById("heatingToggle");
                     if (data.airTemp > tUpper && hToggle.checked) { hToggle.checked = false; toggleHeating(); }
                     else if (data.airTemp < tLower && !hToggle.checked) { hToggle.checked = true; toggleHeating(); }
 
-                    // 2. ნიადაგის გამათბობელი კაბელის ავტომატიზაცია
-                    var stUpper = parseFloat(document.getElementById("soilTempLimit").value);
-                    var stLower = parseFloat(document.getElementById("soilTempLowerLimit").value);
+                    // 2. ნიადაგის გათბობის კაბელი (Relay 2)
+                    var stUpper = parseFloat(document.getElementById("soilTempMax").value);
+                    var stLower = parseFloat(document.getElementById("soilTempMin").value);
                     var shToggle = document.getElementById("soilHeatingToggle");
                     if (data.soilTemp > stUpper && shToggle.checked) { shToggle.checked = false; toggleSoilHeating(); }
                     else if (data.soilTemp < stLower && !shToggle.checked) { shToggle.checked = true; toggleSoilHeating(); }
 
-                    // 3. მორწყვის ავტომატიზაცია + ტუმბოს დაცვა (ავზი < 10%)
-                    var mUpper = parseFloat(document.getElementById("moistureLimit").value);
-                    var mLower = parseFloat(document.getElementById("moistureLowerLimit").value);
+                    // 3. ნიადაგის მორწყვა (Relay 3)
+                    var mUpper = parseFloat(document.getElementById("moistMax").value);
+                    var mLower = parseFloat(document.getElementById("moistMin").value);
                     var wToggle = document.getElementById("wateringToggle");
                     if (data.waterLevel < 10 && wToggle.checked) {
                         wToggle.checked = false;
@@ -396,14 +441,6 @@ const char* htmlPage = R"=====(
             el.className = "badge " + (state ? "on" : "off");
         }
 
-        function updateLimits(type) {
-            var low = document.getElementById(type + 'LowerLimit').value;
-            var up = document.getElementById(type + 'Limit').value;
-            var unit = type.includes('temp') || type.includes('Temp') ? '°C' : '%';
-            document.getElementById(type + 'LowerLimitDisplay').innerText = low + unit;
-            document.getElementById(type + 'LimitDisplay').innerText = up + unit;
-        }
-
         function toggleTheme() {
             document.body.classList.toggle('dark-mode');
             var isDark = document.body.classList.contains('dark-mode');
@@ -426,18 +463,21 @@ const char* htmlPage = R"=====(
             xhr.send();
         }
 
-        function toggleWatering() {
-            var xhr = new XMLHttpRequest();
-            xhr.open("GET", "/toggleWatering", true);
-            xhr.send();
-        }
-
         function toggleSoilHeating() {
             var xhr = new XMLHttpRequest();
             xhr.open("GET", "/toggleSoilHeating", true);
             xhr.send();
         }
 
+        function toggleWatering() {
+            var xhr = new XMLHttpRequest();
+            xhr.open("GET", "/toggleWatering", true);
+            xhr.send();
+        }
+
+        slideDual('temp', 'Init');
+        slideDual('soilTemp', 'Init');
+        slideDual('moist', 'Init');
         loadTheme();
         setInterval(updateReadings, 2000);
     </script>
@@ -451,8 +491,8 @@ void setup() {
     pinMode(DHTPIN, INPUT);
     pinMode(MQ135_PIN, INPUT);
     pinMode(relayPin1, OUTPUT);
-    pinMode(relayPin2, OUTPUT);
     pinMode(relayPinSoil, OUTPUT);
+    pinMode(relayPinWater, OUTPUT);
 
     Wire.begin(D2, D3);
     
@@ -465,16 +505,16 @@ void setup() {
 
     EEPROM.begin(EEPROM_SIZE);
     uint8_t r1 = EEPROM.read(RELAY1_ADDR);
-    uint8_t r2 = EEPROM.read(RELAY2_ADDR);
-    uint8_t r3 = EEPROM.read(RELAY_SOIL_ADDR);
+    uint8_t r2 = EEPROM.read(RELAY_SOIL_ADDR);
+    uint8_t r3 = EEPROM.read(RELAY_WATER_ADDR);
     
     relayState1 = (r1 == 1);
-    relayState2 = (r2 == 1);
-    relayStateSoil = (r3 == 1);
+    relayStateSoil = (r2 == 1);
+    relayStateWater = (r3 == 1);
 
     digitalWrite(relayPin1, relayState1 ? HIGH : LOW);
-    digitalWrite(relayPin2, relayState2 ? HIGH : LOW);
     digitalWrite(relayPinSoil, relayStateSoil ? HIGH : LOW);
+    digitalWrite(relayPinWater, relayStateWater ? HIGH : LOW);
 
     if (!WiFi.config(local_IP, gateway, subnet, primaryDNS, secondaryDNS)) {
         Serial.println("WiFi IP კონფიგურაცია ვერ მოხერხდა");
@@ -522,8 +562,8 @@ void setup() {
         response += "\"isRaining\":" + String(isRaining ? "true" : "false") + ",";
         response += "\"gasDetected\":" + String(gasDetected ? "true" : "false") + ",";
         response += "\"heatingState\":" + String(relayState1 ? "true" : "false") + ",";
-        response += "\"wateringState\":" + String(relayState2 ? "true" : "false") + ",";
-        response += "\"soilHeatingState\":" + String(relayStateSoil ? "true" : "false");
+        response += "\"soilHeatingState\":" + String(relayStateSoil ? "true" : "false") + ",";
+        response += "\"wateringState\":" + String(relayStateWater ? "true" : "false");
         response += "}";
 
         request->send(200, "application/json", response);
@@ -536,17 +576,17 @@ void setup() {
         request->send(200, "application/json", "{\"status\":\"OK\"}");
     });
 
-    server.on("/toggleWatering", HTTP_GET, [](AsyncWebServerRequest *request) {
-        relayState2 = !relayState2;
-        digitalWrite(relayPin2, relayState2 ? HIGH : LOW);
-        saveRelayState(RELAY2_ADDR, relayState2);
-        request->send(200, "application/json", "{\"status\":\"OK\"}");
-    });
-
     server.on("/toggleSoilHeating", HTTP_GET, [](AsyncWebServerRequest *request) {
         relayStateSoil = !relayStateSoil;
         digitalWrite(relayPinSoil, relayStateSoil ? HIGH : LOW);
         saveRelayState(RELAY_SOIL_ADDR, relayStateSoil);
+        request->send(200, "application/json", "{\"status\":\"OK\"}");
+    });
+
+    server.on("/toggleWatering", HTTP_GET, [](AsyncWebServerRequest *request) {
+        relayStateWater = !relayStateWater;
+        digitalWrite(relayPinWater, relayStateWater ? HIGH : LOW);
+        saveRelayState(RELAY_WATER_ADDR, relayStateWater);
         request->send(200, "application/json", "{\"status\":\"OK\"}");
     });
 

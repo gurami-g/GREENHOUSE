@@ -9,6 +9,7 @@
 #include <OneWire.h>
 #include <DallasTemperature.h>
 
+// --- WiFi პარამეტრები ---
 const char* ssid = "MAGTI-1";
 const char* password = "gorgadze12";
 
@@ -18,24 +19,29 @@ IPAddress subnet(255, 255, 255, 0);
 IPAddress primaryDNS(8, 8, 8, 8);
 IPAddress secondaryDNS(8, 8, 4, 4);
 
+// --- პინების განმარტება ---
 #define DHTPIN D1
 #define DHTTYPE DHT22
 DHT dht(DHTPIN, DHTTYPE);
 
-#define ONE_WIRE_BUS D4
+#define ONE_WIRE_BUS D4   // DS18B20 ნიადაგის ტემპერატურა
 OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature soilTempSensor(&oneWire);
 
-#define MQ135_PIN D5
+#define MQ135_PIN D5      // გაზი/კვამლი (Digital DO)
 
-const int relayPin1 = D6; // გათბობა
-const int relayPin2 = D7; // მორწყვა
+const int relayPin1 = D6;    // ჰაერის გათბობის რელე
+const int relayPin2 = D7;    // მორწყვის რელე
+const int relayPinSoil = D8; // ნიადაგის გამათბობელი კაბელის რელე
 
+// --- I2C მოდულები ---
 Adafruit_ADS1115 ads;
 BH1750 lightMeter;
 
+// --- ცვლადები ---
 bool relayState1 = false; 
 bool relayState2 = false; 
+bool relayStateSoil = false;
 
 float airTemp = 0.0, airHum = 0.0;
 float soilTemp = 0.0;
@@ -45,14 +51,16 @@ int waterLevelPct = 0;
 bool isRaining = false;
 bool gasDetected = false;
 
+// ADS1115 კალიბრაციის მნიშვნელობები
 const int SoilAirValue = 18000;
 const int SoilWaterValue = 9000;
 const int WaterEmptyValue = 5000;
 const int WaterFullValue = 18000;
 
-#define EEPROM_SIZE 2
+#define EEPROM_SIZE 3
 #define RELAY1_ADDR 0
 #define RELAY2_ADDR 1
+#define RELAY_SOIL_ADDR 2
 
 void saveRelayState(int addr, bool state);
 
@@ -64,32 +72,43 @@ const char* htmlPage = R"=====(
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>სათბური - სრული მართვა</title>
+    <title>სათბურის მართვა Pro</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         :root {
-            --bg: #0f172a;
-            --card: #1e293b;
-            --text: #f8fafc;
-            --sub: #94a3b8;
-            --border: #334155;
+            --bg: #f8fafc;
+            --card: #ffffff;
+            --text: #0f172a;
+            --sub: #64748b;
+            --border: #e2e8f0;
             --green: #10b981;
             --blue: #06b6d4;
             --red: #f43f5e;
             --amber: #f59e0b;
             --purple: #a855f7;
             --radius: 16px;
+            --shadow: 0 10px 25px rgba(0,0,0,0.05);
+        }
+
+        body.dark-mode {
+            --bg: #0f172a;
+            --card: #1e293b;
+            --text: #f8fafc;
+            --sub: #94a3b8;
+            --border: #334155;
             --shadow: 0 10px 25px rgba(0,0,0,0.3);
         }
 
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; transition: background 0.3s, color 0.3s; }
         body { background: var(--bg); color: var(--text); padding: 20px; min-height: 100vh; }
         .container { max-width: 1200px; margin: 0 auto; }
 
         .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
         .brand { font-size: 1.6rem; font-weight: 800; color: var(--green); display: flex; align-items: center; gap: 10px; }
-
+        
+        .header-actions { display: flex; align-items: center; gap: 12px; }
+        .theme-btn { background: var(--card); border: 1px solid var(--border); color: var(--text); padding: 8px 14px; border-radius: 20px; cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 6px; box-shadow: var(--shadow); }
         .status-badge { background: rgba(16, 185, 129, 0.2); color: var(--green); padding: 6px 14px; border-radius: 20px; font-weight: 700; font-size: 0.85rem; }
 
         .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
@@ -128,8 +147,14 @@ const char* htmlPage = R"=====(
 
     <div class="container">
         <div class="header">
-            <div class="brand"><i class="fa-solid fa-leaf"></i> სათბური - 6 სენსორი</div>
-            <div class="status-badge">ONLINE</div>
+            <div class="brand"><i class="fa-solid fa-seedling"></i> სათბური Pro</div>
+            <div class="header-actions">
+                <button class="theme-btn" onclick="toggleTheme()">
+                    <i class="fa-solid fa-moon" id="tIcon"></i>
+                    <span id="tText">მუქი</span>
+                </button>
+                <div class="status-badge">ONLINE</div>
+            </div>
         </div>
 
         <div class="grid">
@@ -162,7 +187,7 @@ const char* htmlPage = R"=====(
                     </div>
                 </div>
                 <div class="relay-box">
-                    <span style="font-size: 0.85rem; font-weight: 600;">გათბობის რელე</span>
+                    <span style="font-size: 0.85rem; font-weight: 600;">ჰაერის გათბობა (Relay 1)</span>
                     <label class="switch">
                         <input type="checkbox" id="heatingToggle" onclick="toggleHeating()">
                         <span class="slider"></span>
@@ -170,21 +195,44 @@ const char* htmlPage = R"=====(
                 </div>
             </div>
 
-            <!-- 2. ნიადაგი & ფესვები -->
+            <!-- 2. ნიადაგის გათბობა -->
             <div class="card">
                 <div class="card-title">
-                    <span><i class="fa-solid fa-droplet" style="color: var(--amber);"></i> ნიადაგი & ფესვები</span>
+                    <span><i class="fa-solid fa-fire-flame-curved" style="color: var(--purple);"></i> ნიადაგის გათბობა</span>
+                    <span id="soilHeatBadge" class="badge off">კაბელი: OFF</span>
+                </div>
+                <div>
+                    <div class="sub-text">ფესვების ტემპერატურა (DS18B20)</div>
+                    <div id="soilTemp" class="val-large" style="color: var(--purple);">--°C</div>
+                </div>
+                <div class="controls">
+                    <div class="control-row">
+                        <div class="control-label"><span>ქვედა ზღვარი</span><span id="soilTempLowerLimitDisplay">18°C</span></div>
+                        <input type="range" id="soilTempLowerLimit" min="0" max="40" value="18" oninput="updateLimits('soilTemp')">
+                    </div>
+                    <div class="control-row">
+                        <div class="control-label"><span>ზედა ზღვარი</span><span id="soilTempLimitDisplay">22°C</span></div>
+                        <input type="range" id="soilTempLimit" min="0" max="40" value="22" oninput="updateLimits('soilTemp')">
+                    </div>
+                </div>
+                <div class="relay-box">
+                    <span style="font-size: 0.85rem; font-weight: 600;">გამათბობელი კაბელი (Relay 3)</span>
+                    <label class="switch">
+                        <input type="checkbox" id="soilHeatingToggle" onclick="toggleSoilHeating()">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- 3. ნიადაგის მორწყვა -->
+            <div class="card">
+                <div class="card-title">
+                    <span><i class="fa-solid fa-droplet" style="color: var(--amber);"></i> ნიადაგის მორწყვა</span>
                     <span id="waterBadge" class="badge off">მორწყვა: OFF</span>
                 </div>
-                <div style="display: flex; justify-content: space-between;">
-                    <div>
-                        <div class="sub-text">ნიადაგის ტენიანობა</div>
-                        <div id="soilMoist" class="val-large" style="color: var(--amber);">--%</div>
-                    </div>
-                    <div>
-                        <div class="sub-text">ფესვების ტემპ.</div>
-                        <div id="soilTemp" class="val-large" style="color: var(--purple);">--°C</div>
-                    </div>
+                <div>
+                    <div class="sub-text">ნიადაგის ტენიანობა</div>
+                    <div id="soilMoist" class="val-large" style="color: var(--amber);">--%</div>
                 </div>
                 <div class="chart-box"><canvas id="soilChart"></canvas></div>
                 <div class="controls">
@@ -198,7 +246,7 @@ const char* htmlPage = R"=====(
                     </div>
                 </div>
                 <div class="relay-box">
-                    <span style="font-size: 0.85rem; font-weight: 600;">მორწყვის რელე</span>
+                    <span style="font-size: 0.85rem; font-weight: 600;">მორწყვის რელე (Relay 2)</span>
                     <label class="switch">
                         <input type="checkbox" id="wateringToggle" onclick="toggleWatering()">
                         <span class="slider"></span>
@@ -206,7 +254,7 @@ const char* htmlPage = R"=====(
                 </div>
             </div>
 
-            <!-- 3. განათების სენსორი -->
+            <!-- 4. განათება -->
             <div class="card">
                 <div class="card-title">
                     <span><i class="fa-solid fa-sun" style="color: #eab308;"></i> განათება (BH1750)</span>
@@ -216,7 +264,7 @@ const char* htmlPage = R"=====(
                 <div class="progress-bg"><div id="luxBar" class="progress-fill" style="background: #eab308;"></div></div>
             </div>
 
-            <!-- 4. წყლის ავზი -->
+            <!-- 5. წყლის ავზი -->
             <div class="card">
                 <div class="card-title">
                     <span><i class="fa-solid fa-faucet-drip" style="color: var(--blue);"></i> წყლის ავზი</span>
@@ -226,22 +274,21 @@ const char* htmlPage = R"=====(
                 <div class="progress-bg"><div id="waterBar" class="progress-fill" style="background: var(--blue);"></div></div>
             </div>
 
-            <!-- 5. წვიმის სენსორი -->
+            <!-- 6. გარემო & უსაფრთხოება -->
             <div class="card">
                 <div class="card-title">
-                    <span><i class="fa-solid fa-cloud-rain" style="color: var(--blue);"></i> ნალექი</span>
+                    <span><i class="fa-solid fa-shield-halved" style="color: var(--red);"></i> გარემო & უსაფრთხოება</span>
                 </div>
-                <div class="sub-text">წვიმის სტატუსი</div>
-                <div id="rainStatus" class="val-large" style="color: var(--sub);">--</div>
-            </div>
-
-            <!-- 6. უსაფრთხოება -->
-            <div class="card">
-                <div class="card-title">
-                    <span><i class="fa-solid fa-shield-halved" style="color: var(--red);"></i> გაზი / კვამლი</span>
+                <div style="display: flex; justify-content: space-between;">
+                    <div>
+                        <div class="sub-text">ნალექი</div>
+                        <div id="rainStatus" class="val-large" style="font-size: 1.3rem; color: var(--sub);">--</div>
+                    </div>
+                    <div>
+                        <div class="sub-text">გაზი/კვამლი</div>
+                        <div id="gasStatus" class="val-large" style="font-size: 1.3rem; color: var(--green);">ნორმა</div>
+                    </div>
                 </div>
-                <div class="sub-text">ჰაერის უსაფრთხოება (MQ-135)</div>
-                <div id="gasStatus" class="val-large" style="color: var(--green);">ნორმა</div>
             </div>
 
         </div>
@@ -265,8 +312,7 @@ const char* htmlPage = R"=====(
         const soilChart = new Chart(sCtx, {
             type: 'line',
             data: { labels: labels, datasets: [
-                { label: 'SM', data: [], borderColor: '#f59e0b', fill: false, tension: 0.3 },
-                { label: 'ST', data: [], borderColor: '#a855f7', fill: false, tension: 0.3 }
+                { label: 'SM', data: [], borderColor: '#f59e0b', fill: false, tension: 0.3 }
             ]},
             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { display: false } } }
         });
@@ -293,7 +339,35 @@ const char* htmlPage = R"=====(
 
                     updateBadge("heatBadge", data.heatingState, "გათბობა");
                     updateBadge("waterBadge", data.wateringState, "მორწყვა");
+                    updateBadge("soilHeatBadge", data.soilHeatingState, "კაბელი");
 
+                    // 1. ჰაერის გათბობის ავტომატიზაცია
+                    var tUpper = parseFloat(document.getElementById("tempLimit").value);
+                    var tLower = parseFloat(document.getElementById("tempLowerLimit").value);
+                    var hToggle = document.getElementById("heatingToggle");
+                    if (data.airTemp > tUpper && hToggle.checked) { hToggle.checked = false; toggleHeating(); }
+                    else if (data.airTemp < tLower && !hToggle.checked) { hToggle.checked = true; toggleHeating(); }
+
+                    // 2. ნიადაგის გამათბობელი კაბელის ავტომატიზაცია
+                    var stUpper = parseFloat(document.getElementById("soilTempLimit").value);
+                    var stLower = parseFloat(document.getElementById("soilTempLowerLimit").value);
+                    var shToggle = document.getElementById("soilHeatingToggle");
+                    if (data.soilTemp > stUpper && shToggle.checked) { shToggle.checked = false; toggleSoilHeating(); }
+                    else if (data.soilTemp < stLower && !shToggle.checked) { shToggle.checked = true; toggleSoilHeating(); }
+
+                    // 3. მორწყვის ავტომატიზაცია + ტუმბოს დაცვა (ავზი < 10%)
+                    var mUpper = parseFloat(document.getElementById("moistureLimit").value);
+                    var mLower = parseFloat(document.getElementById("moistureLowerLimit").value);
+                    var wToggle = document.getElementById("wateringToggle");
+                    if (data.waterLevel < 10 && wToggle.checked) {
+                        wToggle.checked = false;
+                        toggleWatering();
+                    } else {
+                        if (data.soilMoist > mUpper && wToggle.checked) { wToggle.checked = false; toggleWatering(); }
+                        else if (data.soilMoist < mLower && !wToggle.checked) { wToggle.checked = true; toggleWatering(); }
+                    }
+
+                    // გრაფიკები
                     const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                     if (labels.length >= maxPoints) labels.shift();
                     labels.push(timeStr);
@@ -302,19 +376,16 @@ const char* htmlPage = R"=====(
                         climateChart.data.datasets[0].data.shift();
                         climateChart.data.datasets[1].data.shift();
                         soilChart.data.datasets[0].data.shift();
-                        soilChart.data.datasets[1].data.shift();
                     }
 
                     climateChart.data.datasets[0].data.push(data.airTemp);
                     climateChart.data.datasets[1].data.push(data.airHum);
                     soilChart.data.datasets[0].data.push(data.soilMoist);
-                    soilChart.data.datasets[1].data.push(data.soilTemp);
 
                     climateChart.update();
                     soilChart.update();
                 }
             };
-            // Cache-Busting მოთხოვნა
             xhr.open("GET", "/readings?t=" + new Date().getTime(), true);
             xhr.send();
         }
@@ -328,9 +399,25 @@ const char* htmlPage = R"=====(
         function updateLimits(type) {
             var low = document.getElementById(type + 'LowerLimit').value;
             var up = document.getElementById(type + 'Limit').value;
-            var unit = type === 'temp' ? '°C' : '%';
+            var unit = type.includes('temp') || type.includes('Temp') ? '°C' : '%';
             document.getElementById(type + 'LowerLimitDisplay').innerText = low + unit;
             document.getElementById(type + 'LimitDisplay').innerText = up + unit;
+        }
+
+        function toggleTheme() {
+            document.body.classList.toggle('dark-mode');
+            var isDark = document.body.classList.contains('dark-mode');
+            localStorage.setItem('theme', isDark ? 'dark' : 'light');
+            document.getElementById('tIcon').className = isDark ? 'fa-solid fa-sun' : 'fa-solid fa-moon';
+            document.getElementById('tText').innerText = isDark ? 'ნათელი' : 'მუქი';
+        }
+
+        function loadTheme() {
+            if (localStorage.getItem('theme') === 'dark') {
+                document.body.classList.add('dark-mode');
+                document.getElementById('tIcon').className = 'fa-solid fa-sun';
+                document.getElementById('tText').innerText = 'ნათელი';
+            }
         }
 
         function toggleHeating() {
@@ -345,6 +432,13 @@ const char* htmlPage = R"=====(
             xhr.send();
         }
 
+        function toggleSoilHeating() {
+            var xhr = new XMLHttpRequest();
+            xhr.open("GET", "/toggleSoilHeating", true);
+            xhr.send();
+        }
+
+        loadTheme();
         setInterval(updateReadings, 2000);
     </script>
 </body>
@@ -358,6 +452,7 @@ void setup() {
     pinMode(MQ135_PIN, INPUT);
     pinMode(relayPin1, OUTPUT);
     pinMode(relayPin2, OUTPUT);
+    pinMode(relayPinSoil, OUTPUT);
 
     Wire.begin(D2, D3);
     
@@ -371,12 +466,15 @@ void setup() {
     EEPROM.begin(EEPROM_SIZE);
     uint8_t r1 = EEPROM.read(RELAY1_ADDR);
     uint8_t r2 = EEPROM.read(RELAY2_ADDR);
+    uint8_t r3 = EEPROM.read(RELAY_SOIL_ADDR);
     
     relayState1 = (r1 == 1);
     relayState2 = (r2 == 1);
+    relayStateSoil = (r3 == 1);
 
     digitalWrite(relayPin1, relayState1 ? HIGH : LOW);
     digitalWrite(relayPin2, relayState2 ? HIGH : LOW);
+    digitalWrite(relayPinSoil, relayStateSoil ? HIGH : LOW);
 
     if (!WiFi.config(local_IP, gateway, subnet, primaryDNS, secondaryDNS)) {
         Serial.println("WiFi IP კონფიგურაცია ვერ მოხერხდა");
@@ -424,7 +522,8 @@ void setup() {
         response += "\"isRaining\":" + String(isRaining ? "true" : "false") + ",";
         response += "\"gasDetected\":" + String(gasDetected ? "true" : "false") + ",";
         response += "\"heatingState\":" + String(relayState1 ? "true" : "false") + ",";
-        response += "\"wateringState\":" + String(relayState2 ? "true" : "false");
+        response += "\"wateringState\":" + String(relayState2 ? "true" : "false") + ",";
+        response += "\"soilHeatingState\":" + String(relayStateSoil ? "true" : "false");
         response += "}";
 
         request->send(200, "application/json", response);
@@ -441,6 +540,13 @@ void setup() {
         relayState2 = !relayState2;
         digitalWrite(relayPin2, relayState2 ? HIGH : LOW);
         saveRelayState(RELAY2_ADDR, relayState2);
+        request->send(200, "application/json", "{\"status\":\"OK\"}");
+    });
+
+    server.on("/toggleSoilHeating", HTTP_GET, [](AsyncWebServerRequest *request) {
+        relayStateSoil = !relayStateSoil;
+        digitalWrite(relayPinSoil, relayStateSoil ? HIGH : LOW);
+        saveRelayState(RELAY_SOIL_ADDR, relayStateSoil);
         request->send(200, "application/json", "{\"status\":\"OK\"}");
     });
 

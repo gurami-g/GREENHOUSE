@@ -31,8 +31,8 @@ DallasTemperature soilTempSensor(&oneWire);
 #define MQ135_PIN D5      // გაზი/კვამლი (Digital DO)
 
 const int relayPin1 = D6;    // Relay 1: ჰაერის გათბობა
-const int relayPinSoil = D7; // Relay 2: ნიადაგის გათბობის კაბელი (ადგილები გაიცვალა)
-const int relayPinWater = D8; // Relay 3: მორწყვა (ადგილები გაიცვალა)
+const int relayPinSoil = D7; // Relay 2: ნიადაგის გათბობის კაბელი
+const int relayPinWater = D8; // Relay 3: მორწყვა
 
 // --- I2C მოდულები ---
 Adafruit_ADS1115 ads;
@@ -113,7 +113,8 @@ const char* htmlPage = R"=====(
 
         .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
 
-        .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 15px; }
+        /* Card Alignment */
+        .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow); display: flex; flex-direction: column; height: 100%; gap: 15px; }
         .card-title { font-weight: 700; font-size: 1.1rem; display: flex; justify-content: space-between; align-items: center; }
 
         .val-large { font-size: 2rem; font-weight: 800; margin: 5px 0; }
@@ -125,7 +126,7 @@ const char* htmlPage = R"=====(
         .chart-box { height: 120px; width: 100%; }
 
         /* --- Dual Range Slider Style --- */
-        .range-wrapper { display: flex; flex-direction: column; gap: 8px; }
+        .range-wrapper { display: flex; flex-direction: column; gap: 8px; margin-top: auto; }
         .range-header { display: flex; justify-content: space-between; font-size: 0.85rem; font-weight: 600; color: var(--sub); }
         .range-header span.val { color: var(--green); font-weight: 700; }
         .dual-slider { position: relative; width: 100%; height: 6px; background: var(--border); border-radius: 3px; }
@@ -140,7 +141,8 @@ const char* htmlPage = R"=====(
             height: 18px; width: 18px; border-radius: 50%; background: var(--text); border: 2px solid var(--green); pointer-events: auto; cursor: pointer;
         }
 
-        .relay-box { display: flex; justify-content: space-between; align-items: center; padding-top: 10px; border-top: 1px solid var(--border); }
+        /* Relay alignment at the very bottom */
+        .relay-box { display: flex; justify-content: space-between; align-items: center; padding-top: 15px; border-top: 1px solid var(--border); margin-top: 15px; }
         .badge { padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; }
         .badge.on { background: rgba(16, 185, 129, 0.2); color: var(--green); }
         .badge.off { background: rgba(244, 63, 94, 0.2); color: var(--red); }
@@ -187,7 +189,6 @@ const char* htmlPage = R"=====(
                 </div>
                 <div class="chart-box"><canvas id="climateChart"></canvas></div>
 
-                <!-- ერთ ვიზუალში გაერთიანებული ზღვრები -->
                 <div class="range-wrapper">
                     <div class="range-header">
                         <span>ტემპერატურის ზღვარი</span>
@@ -219,8 +220,8 @@ const char* htmlPage = R"=====(
                     <div class="sub-text">ფესვების ტემპერატურა (DS18B20)</div>
                     <div id="soilTemp" class="val-large" style="color: var(--purple);">--°C</div>
                 </div>
+                <div class="chart-box"><canvas id="soilTempChart"></canvas></div>
 
-                <!-- ერთ ვიზუალში გაერთიანებული ზღვრები -->
                 <div class="range-wrapper">
                     <div class="range-header">
                         <span>ტემპერატურის ზღვარი</span>
@@ -252,9 +253,8 @@ const char* htmlPage = R"=====(
                     <div class="sub-text">ნიადაგის ტენიანობა</div>
                     <div id="soilMoist" class="val-large" style="color: var(--amber);">--%</div>
                 </div>
-                <div class="chart-box"><canvas id="soilChart"></canvas></div>
+                <div class="chart-box"><canvas id="soilMoistChart"></canvas></div>
 
-                <!-- ერთ ვიზუალში გაერთიანებული ზღვრები -->
                 <div class="range-wrapper">
                     <div class="range-header">
                         <span>ტენიანობის ზღვარი</span>
@@ -283,7 +283,7 @@ const char* htmlPage = R"=====(
                 </div>
                 <div class="sub-text">სინათლის ინტენსივობა</div>
                 <div id="lux" class="val-large" style="color: #eab308;">-- Lux</div>
-                <div class="progress-bg"><div id="luxBar" class="progress-fill" style="background: #eab308;"></div></div>
+                <div class="progress-bg" style="margin-top: auto;"><div id="luxBar" class="progress-fill" style="background: #eab308;"></div></div>
             </div>
 
             <!-- 5. წყლის ავზი -->
@@ -293,7 +293,7 @@ const char* htmlPage = R"=====(
                 </div>
                 <div class="sub-text">ავზის შევსების დონე</div>
                 <div id="waterLevel" class="val-large" style="color: var(--blue);">--%</div>
-                <div class="progress-bg"><div id="waterBar" class="progress-fill" style="background: var(--blue);"></div></div>
+                <div class="progress-bg" style="margin-top: auto;"><div id="waterBar" class="progress-fill" style="background: var(--blue);"></div></div>
             </div>
 
             <!-- 6. გარემო & უსაფრთხოება -->
@@ -301,7 +301,7 @@ const char* htmlPage = R"=====(
                 <div class="card-title">
                     <span><i class="fa-solid fa-shield-halved" style="color: var(--red);"></i> გარემო & უსაფრთხოება</span>
                 </div>
-                <div style="display: flex; justify-content: space-between;">
+                <div style="display: flex; justify-content: space-between; margin-top: auto;">
                     <div>
                         <div class="sub-text">ნალექი</div>
                         <div id="rainStatus" class="val-large" style="font-size: 1.3rem; color: var(--sub);">--</div>
@@ -320,6 +320,7 @@ const char* htmlPage = R"=====(
         const maxPoints = 10;
         const labels = [];
 
+        // 1. ჰაერის კლიმატის გრაფიკი
         const cCtx = document.getElementById('climateChart').getContext('2d');
         const climateChart = new Chart(cCtx, {
             type: 'line',
@@ -330,8 +331,19 @@ const char* htmlPage = R"=====(
             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { display: false } } }
         });
 
-        const sCtx = document.getElementById('soilChart').getContext('2d');
-        const soilChart = new Chart(sCtx, {
+        // 2. ნიადაგის ტემპერატურის გრაფიკი
+        const stCtx = document.getElementById('soilTempChart').getContext('2d');
+        const soilTempChart = new Chart(stCtx, {
+            type: 'line',
+            data: { labels: labels, datasets: [
+                { label: 'ST', data: [], borderColor: '#a855f7', fill: false, tension: 0.3 }
+            ]},
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { display: false } } }
+        });
+
+        // 3. ნიადაგის ტენიანობის გრაფიკი
+        const smCtx = document.getElementById('soilMoistChart').getContext('2d');
+        const soilMoistChart = new Chart(smCtx, {
             type: 'line',
             data: { labels: labels, datasets: [
                 { label: 'SM', data: [], borderColor: '#f59e0b', fill: false, tension: 0.3 }
@@ -353,7 +365,6 @@ const char* htmlPage = R"=====(
             document.getElementById(prefix + 'MinLabel').innerText = minEl.value;
             document.getElementById(prefix + 'MaxLabel').innerText = maxEl.value;
 
-            // Track Fill Update
             let track = document.getElementById(prefix + 'Track');
             let maxRange = parseInt(minEl.max);
             let leftPct = (minEl.value / maxRange) * 100;
@@ -393,14 +404,14 @@ const char* htmlPage = R"=====(
                     if (data.airTemp > tUpper && hToggle.checked) { hToggle.checked = false; toggleHeating(); }
                     else if (data.airTemp < tLower && !hToggle.checked) { hToggle.checked = true; toggleHeating(); }
 
-                    // 2. ნიადაგის გათბობის კაბელი (Relay 2)
+                    // 2. ნიადაგის გათბობის კაბელი
                     var stUpper = parseFloat(document.getElementById("soilTempMax").value);
                     var stLower = parseFloat(document.getElementById("soilTempMin").value);
                     var shToggle = document.getElementById("soilHeatingToggle");
                     if (data.soilTemp > stUpper && shToggle.checked) { shToggle.checked = false; toggleSoilHeating(); }
                     else if (data.soilTemp < stLower && !shToggle.checked) { shToggle.checked = true; toggleSoilHeating(); }
 
-                    // 3. ნიადაგის მორწყვა (Relay 3)
+                    // 3. ნიადაგის მორწყვა
                     var mUpper = parseFloat(document.getElementById("moistMax").value);
                     var mLower = parseFloat(document.getElementById("moistMin").value);
                     var wToggle = document.getElementById("wateringToggle");
@@ -412,7 +423,7 @@ const char* htmlPage = R"=====(
                         else if (data.soilMoist < mLower && !wToggle.checked) { wToggle.checked = true; toggleWatering(); }
                     }
 
-                    // გრაფიკები
+                    // გრაფიკების განახლება
                     const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                     if (labels.length >= maxPoints) labels.shift();
                     labels.push(timeStr);
@@ -420,15 +431,18 @@ const char* htmlPage = R"=====(
                     if (climateChart.data.datasets[0].data.length >= maxPoints) {
                         climateChart.data.datasets[0].data.shift();
                         climateChart.data.datasets[1].data.shift();
-                        soilChart.data.datasets[0].data.shift();
+                        soilTempChart.data.datasets[0].data.shift();
+                        soilMoistChart.data.datasets[0].data.shift();
                     }
 
                     climateChart.data.datasets[0].data.push(data.airTemp);
                     climateChart.data.datasets[1].data.push(data.airHum);
-                    soilChart.data.datasets[0].data.push(data.soilMoist);
+                    soilTempChart.data.datasets[0].data.push(data.soilTemp);
+                    soilMoistChart.data.datasets[0].data.push(data.soilMoist);
 
                     climateChart.update();
-                    soilChart.update();
+                    soilTempChart.update();
+                    soilMoistChart.update();
                 }
             };
             xhr.open("GET", "/readings?t=" + new Date().getTime(), true);
